@@ -13,8 +13,8 @@ import {
 } from 'chart.js';
 import { useTranslation } from 'react-i18next';
 import { Trophy } from 'lucide-react';
-import type { Subscription, PeriodPreset } from '@/lib/types';
-import { toCNY, daysBetween, PERIOD_DAYS } from '@/lib/utils';
+import type { Subscription } from '@/lib/types';
+import { toCNY, amortisedAmount, toISO } from '@/lib/utils';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Tooltip, Filler);
 
@@ -33,23 +33,14 @@ const DAYS_SHOWN = 30;
 const cssVar = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const money = (n: number) => `¥${n.toFixed(2)}`;
 
+/** 每日成本只在订阅有效期内计。
+ *
+ *  以前是「金额 ÷ 周期天数」无差别铺到每一天、每个月，导致订阅结束之后还在继续计费
+ *  （一年期的订阅结束后，趋势图上的柱子照样月月都在）。现在统一走
+ *  amortisedAmount：金额 ÷ 有效期天数 × 与目标区间的重叠天数，区间外为 0。
+ */
 function startOfDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-}
-
-/** Cost per day for a subscription, spread across its own date range.
- *  amount / (end_date - start_date); falls back to the stored period. */
-function dayCost(s: {
-  amountCNY: number;
-  start_date?: string | null;
-  end_date?: string | null;
-  period_days: number;
-  period_preset: string;
-}): number {
-  let days = 0;
-  if (s.start_date && s.end_date) days = daysBetween(s.start_date, s.end_date);
-  if (days <= 0) days = Number(s.period_days) || PERIOD_DAYS[s.period_preset as PeriodPreset] || 30;
-  return s.amountCNY / Math.max(1, days);
 }
 
 export default function Charts({ subs, usdRate }: Props) {
@@ -70,10 +61,8 @@ export default function Charts({ subs, usdRate }: Props) {
   );
 
   // ---------- trend ----------
-  // Every active subscription contributes its amortised per-day cost, so a
-  // subscription billed once a month still shows up on every day of the view
-  // instead of as a single spike. Month buckets are that daily rate × the days
-  // in the month.
+  // 每个 active 订阅只在**自己的有效期内**按日摊：金额 ÷ 有效期天数 × 与目标区间的重叠天数。
+  // 月视图一个桶 = 那个自然月，日视图一个桶 = 那一天；订阅结束后桶里就是 0。
   const trend = useMemo(() => {
     const today = startOfDay(new Date());
     const isMonth = mode === 'month';
@@ -84,7 +73,8 @@ export default function Charts({ subs, usdRate }: Props) {
       const values: number[] = [];
       for (let i = 0; i < MONTHS_SHOWN; i++) {
         const d = new Date(first.getFullYear(), first.getMonth() + i, 1);
-        const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+        const monthFrom = toISO(d);
+        const monthTo = toISO(new Date(d.getFullYear(), d.getMonth() + 1, 0));
         const mon = lang === 'en-US' ? d.toLocaleDateString('en-US', { month: 'short' }) : `${d.getMonth() + 1}月`;
         labels.push(
           d.getMonth() === 0 || i === 0
@@ -93,53 +83,73 @@ export default function Charts({ subs, usdRate }: Props) {
               : `${d.getFullYear()}年${mon}`
             : mon,
         );
-        const monthly = cny.reduce((sum, s) => sum + dayCost(s) * daysInMonth, 0);
+        const monthly = cny.reduce((sum, s) => sum + amortisedAmount(s, s.amountCNY, monthFrom, monthTo), 0);
         values.push(Number(monthly.toFixed(2)));
       }
       return { labels, values };
     }
 
-    const daily = cny.reduce((sum, s) => sum + dayCost(s), 0);
     const labels: string[] = [];
     const values: number[] = [];
     for (let i = 0; i < DAYS_SHOWN; i++) {
       const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
+      const iso = toISO(d);
       labels.push(`${d.getMonth() + 1}/${d.getDate()}`);
-      values.push(Number(daily.toFixed(2)));
+      const day = cny.reduce((sum, s) => sum + amortisedAmount(s, s.amountCNY, iso, iso), 0);
+      values.push(Number(day.toFixed(2)));
     }
     return { labels, values };
   }, [cny, mode, lang]);
+
+  // 占比 / Top10 跟着月/日开关走：「月」= 未来 30 天合计（与 StatCards 的月预估同口径），
+  // 「日」= 今天。两者都只统计落在各自有效期内的部分。
+  const topWindow = useMemo(() => {
+    const today = startOfDay(new Date());
+    const from = toISO(today);
+    return {
+      from,
+      to: toISO(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 29)),
+      day: from,
+    };
+  }, []);
+
+  const isMonth = mode === 'month';
 
   // ---------- split ----------
   const splitData = useMemo(() => {
     const map = new Map<string, number>();
     for (const s of cny) {
-      const monthly = dayCost(s) * 30;
+      const amount = isMonth
+        ? amortisedAmount(s, s.amountCNY, topWindow.from, topWindow.to)
+        : amortisedAmount(s, s.amountCNY, topWindow.day, topWindow.day);
+      if (amount <= 0) continue;
       const key = split === 'category' ? s.category?.trim() || t('chart.other') : s.name;
-      map.set(key, (map.get(key) ?? 0) + monthly);
+      map.set(key, (map.get(key) ?? 0) + amount);
     }
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
-  }, [cny, split, t]);
+  }, [cny, split, t, topWindow, isMonth]);
 
   // ---------- top 10 ----------
   const top10 = useMemo(() => {
+    const today = topWindow.from;
     return cny
       .map((s) => {
-        const monthly = dayCost(s) * 30;
-        return { name: s.name, monthly, daily: monthly / 30, end: s.end_date };
+        const monthly = amortisedAmount(s, s.amountCNY, topWindow.from, topWindow.to);
+        const daily = amortisedAmount(s, s.amountCNY, today, today);
+        return { name: s.name, monthly, daily, end: s.end_date };
       })
+      .filter((it) => it.monthly > 0 || it.daily > 0)
       .sort((a, b) => (mode === 'month' ? b.monthly - a.monthly : b.daily - a.daily))
       .slice(0, 10);
-  }, [cny, mode]);
+  }, [cny, mode, topWindow]);
 
   const topMax = top10.length ? (mode === 'month' ? top10[0].monthly : top10[0].daily) : 1;
-  const isMonth = mode === 'month';
 
   const trendData = {
     labels: trend.labels,
     datasets: [
       {
-        label: isMonth ? t('chart.perMonth') : t('chart.perDay'),
+        label: isMonth ? t('chart.legendMonth') : t('chart.legendDay'),
         data: trend.values,
         borderColor: brand,
         backgroundColor: brand + (isMonth ? '33' : 'CC'),
@@ -236,7 +246,7 @@ export default function Charts({ subs, usdRate }: Props) {
         <div>
           <p className="text-xs font-medium text-ink-500 mb-3 flex items-center gap-1.5">
             <Trophy className="w-3.5 h-3.5" />
-            {t('chart.top10')} · {isMonth ? t('chart.perMonth') : t('chart.perDay')}
+            {t('chart.top10')} · {isMonth ? t('chart.next30d') : t('chart.today')}
           </p>
           {top10.length === 0 ? (
             <div className="py-6 text-center text-xs text-ink-400">{t('chart.noData')}</div>
@@ -270,7 +280,10 @@ export default function Charts({ subs, usdRate }: Props) {
         <div>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
             <p className="text-xs font-medium text-ink-500">
-              {split === 'category' ? t('chart.byCategory') : t('chart.byItem')}
+              {(split === 'category' ? t('chart.byCategory') : t('chart.byItem')).replace(
+                '{{span}}',
+                isMonth ? t('chart.next30d') : t('chart.today'),
+              )}
             </p>
             <div className="inline-flex bg-surface-2 rounded-lg p-0.5 self-start">
               {(['category', 'item'] as SplitMode[]).map((s) => (
