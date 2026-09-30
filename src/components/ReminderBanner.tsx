@@ -3,15 +3,20 @@ import { AlertTriangle, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface Props {
-  expiring: number;
-  nearExpiryCards: number;
+  /** 订阅：7 天内扣费 */
+  due: number;
+  /** 储值卡：30 天内过期 */
+  expiringCards: number;
+  /** 用户自设的续费提醒：已到日 */
+  reminders: number;
 }
 
 const DISMISS_KEY = 'asset_tracker_reminder_dismissed';
 
-export default function ReminderBanner({ expiring, nearExpiryCards }: Props) {
+/** 顶部横幅。数字直接来自 collectReminders —— 与铃铛、每日 webhook 同一套口径。 */
+export default function ReminderBanner({ due, expiringCards, reminders }: Props) {
   const { t } = useTranslation();
-  const signature = `${expiring}:${nearExpiryCards}`;
+  const signature = `${due}:${expiringCards}:${reminders}`;
   const [dismissed, setDismissed] = useState(false);
 
   // A dismissal is remembered only for the exact set of items it was made
@@ -24,7 +29,8 @@ export default function ReminderBanner({ expiring, nearExpiryCards }: Props) {
     }
   }, [signature]);
 
-  if (expiring === 0 && nearExpiryCards === 0) return null;
+  const total = due + expiringCards + reminders;
+  if (total === 0) return null;
   if (dismissed) return null;
 
   const dismiss = () => {
@@ -36,12 +42,17 @@ export default function ReminderBanner({ expiring, nearExpiryCards }: Props) {
     }
   };
 
+  const parts: string[] = [];
+  if (due) parts.push(t('reminder.partDue', { n: due }));
+  if (expiringCards) parts.push(t('reminder.partCards', { n: expiringCards }));
+  if (reminders) parts.push(t('reminder.partReminders', { n: reminders }));
+
   return (
     <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
       <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
       <div className="flex-1 text-sm text-amber-700">
-        <p className="font-medium">{t('reminder.text', { expiring, cards: nearExpiryCards })}</p>
-        <p className="text-xs mt-1 opacity-80">{t('reminder.hint')}</p>
+        <p className="font-medium">{t('reminder.text')}</p>
+        <p className="mt-0.5">{parts.join(' · ')}</p>
       </div>
       <button
         type="button"

@@ -13,7 +13,10 @@ const T = {
     uses: '剩余次数合计',
   },
   reminder: {
-    text: '{{expiring}} 个订阅将在 7 天内扣费，{{cards}} 张储值卡将在 30 天内过期',
+    text: '需要关注的项目',
+    partDue: '{{n}} 个订阅 7 天内扣费',
+    partCards: '{{n}} 张储值卡 30 天内过期',
+    partReminders: '{{n}} 条自设提醒已到日',
     hint: '查看下方图表可看趋势',
   },
   chart: {
@@ -220,6 +223,9 @@ const T = {
     cardsExpiring: '30 天内过期',
     daysLeft: '{{n}} 天后',
     today: '今天',
+    overdue: '已过 {{n}} 天',
+    rules:
+      '口径：订阅 {{due}} 天内扣费、储值卡 {{card}} 天内过期、自设提醒到日即响（同一项只出现在一处；webhook 与页面一致）',
     webhookOn: '已配置 Webhook，云端每天 09:00 自动推送提醒。',
     webhookOff: '未配置 Webhook —— 当前仅页面内提醒。想每天自动推送，去「设置 → Webhook URL」填一个地址。',
   },

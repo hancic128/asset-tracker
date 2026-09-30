@@ -254,33 +254,39 @@ def build_digest(conn):
     def within(days, low, high):
         return days is not None and low <= days <= high
 
+    # 以下判据必须与前端 src/lib/reminders.ts 的 collectReminders 完全一致，
+    # 否则「页面内提醒」与「每日 webhook」会各说各话（历史上就是这样）。
+    DUE_WINDOW_DAYS, CARD_WINDOW_DAYS = 7, 30
+
     due = []
     for s in subs:
         d = days_until(s["end_date"])
-        if within(d, 0, 7):
+        if within(d, 0, DUE_WINDOW_DAYS):
             due.append((d, s))
     due.sort(key=lambda t: t[0])
 
     expiring = []
     for c in cards:
         d = days_until(c["expires_at"])
-        if within(d, 0, 30):
+        if within(d, 0, CARD_WINDOW_DAYS):
             expiring.append((d, c))
     expiring.sort(key=lambda t: t[0])
 
     # 用户手填的「到期续费提醒」日期（remind_enabled + remind_date）。
+    # 口径：到日即响（d <= 0），不设上界；也不设下界——续订会把旧周期置 renewed，
+    # 该项随即离开 active，所以不会无限期地响下去。
     # 只取没被上面两块覆盖的项，避免同一项在通知里出现两次。
     sub_covered = {s["id"] for _, s in due}
     card_covered = {c["id"] for _, c in expiring}
     reminded = []
     for s in subs:
         d = days_until(s["remind_date"])
-        if s["remind_enabled"] and s["id"] not in sub_covered and within(d, 0, 7):
+        if s["remind_enabled"] and s["id"] not in sub_covered and d is not None and d <= 0:
             reminded.append((d, s))
     reminded_cards = []
     for c in cards:
         d = days_until(c["remind_date"])
-        if c["remind_enabled"] and c["id"] not in card_covered and within(d, 0, 7):
+        if c["remind_enabled"] and c["id"] not in card_covered and d is not None and d <= 0:
             reminded_cards.append((d, c))
     reminded.sort(key=lambda t: t[0])
     reminded_cards.sort(key=lambda t: t[0])
@@ -289,7 +295,10 @@ def build_digest(conn):
         return None, settings
 
     def when(d):
-        return "今天" if d <= 0 else f"{d} 天后"
+        # 自设提醒的 d 可能为负（已过日），别一律说成「今天」
+        if d < 0:
+            return f"已过 {-d} 天"
+        return "今天" if d == 0 else f"{d} 天后"
 
     lines = []
     if due:

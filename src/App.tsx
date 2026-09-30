@@ -22,7 +22,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToasts } from '@/hooks/useToasts';
 import { useData } from '@/hooks/useData';
 import { initTheme } from '@/lib/storage';
-import { computeStats, isNearExpiry, collectCategories, effectivePeriodDays, addDays, toISO } from '@/lib/utils';
+import { computeStats, collectCategories, effectivePeriodDays, addDays, toISO } from '@/lib/utils';
+import { collectReminders } from '@/lib/reminders';
 import { exportJson, exportCsv, parseImportFile } from '@/lib/exportImport';
 import type { Subscription, StoredValueCard, ThemeName, ColorScheme, Tab } from '@/lib/types';
 
@@ -158,10 +159,8 @@ export default function App() {
     () => collectCategories(data.storedCategories, data.subs, data.cards),
     [data.storedCategories, data.subs, data.cards],
   );
-  const nearExpiryCards = useMemo(
-    () => data.cards.filter((c) => c.status === 'active' && isNearExpiry(c.expires_at)).length,
-    [data.cards],
-  );
+  // 铃铛与横幅共用同一份提醒结果，避免两处口径不一致
+  const reminders = useMemo(() => collectReminders(data.subs, data.cards), [data.subs, data.cards]);
 
   const onSaveSubscription = async (s: Subscription) => {
     try {
@@ -210,7 +209,11 @@ export default function App() {
               show('info', i18n.t('login.signedOut'));
             }}
           />
-          <ReminderBanner expiring={stats.expiring} nearExpiryCards={nearExpiryCards} />
+          <ReminderBanner
+            due={reminders.dueSubs.length}
+            expiringCards={reminders.expiringCards.length}
+            reminders={reminders.remindSubs.length + reminders.remindCards.length}
+          />
 
           {data.error && (
             <div className="mb-6 bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 rounded-xl px-4 py-3 flex items-start gap-3">

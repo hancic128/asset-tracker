@@ -93,26 +93,60 @@ class DigestTests(unittest.TestCase):
             self.assertTrue(str(payload[key]).strip(), f"{key} 不能为空")
 
     def test_manual_reminder_fires_even_when_end_date_is_far(self):
-        """订阅截止日在 90 天后，但用户把提醒日设在 3 天后 —— 必须进摘要。"""
+        """订阅截止日在 90 天后，但用户把提醒日设在 3 天后 —— 现在还不该响（到日才响）。"""
         with server.connect() as conn:
             far = (date.today() + timedelta(days=90)).isoformat()
             remind = (date.today() + timedelta(days=3)).isoformat()
             self._insert_sub(conn, "年费会员", far, 199.0, remind=remind, remind_on=True)
             payload, _ = server.build_digest(conn)
-        self.assertIsNotNone(payload, "只设了提醒日也应产生摘要")
+        self.assertIsNone(payload, "提醒日未到，不该产生摘要")
+
+    def test_manual_reminder_fires_on_the_day(self):
+        """提醒日 = 今天 → 必须进摘要。"""
+        with server.connect() as conn:
+            far = (date.today() + timedelta(days=90)).isoformat()
+            self._insert_sub(conn, "年费会员", far, 199.0, remind=date.today().isoformat(), remind_on=True)
+            payload, _ = server.build_digest(conn)
+        self.assertIsNotNone(payload)
         self.assertEqual(payload["summary"]["reminders_count"], 1)
         self.assertEqual(payload["summary"]["upcoming_subscriptions_count"], 0)
         self.assertIn("年费会员", payload["body"])
         self.assertEqual([r["name"] for r in payload["reminders"]], ["年费会员"])
 
+    def test_manual_reminder_keeps_firing_after_the_date_passed(self):
+        """提醒日已过 10 天、该项仍 active → 继续响（续订后 status 变 renewed 才停）。"""
+        with server.connect() as conn:
+            far = (date.today() + timedelta(days=200)).isoformat()
+            remind = (date.today() - timedelta(days=10)).isoformat()
+            self._insert_sub(conn, "忘记续的年费", far, 199.0, remind=remind, remind_on=True)
+            payload, _ = server.build_digest(conn)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["summary"]["reminders_count"], 1)
+        self.assertIn("已过 10 天", payload["body"])
+
+    def test_manual_reminder_wakes_again_when_far_off(self):
+        """提醒日设在 30 天后 → 页面和 webhook 都不该提前响。"""
+        with server.connect() as conn:
+            far = (date.today() + timedelta(days=200)).isoformat()
+            remind = (date.today() + timedelta(days=30)).isoformat()
+            self._insert_sub(conn, "年费会员", far, 199.0, remind=remind, remind_on=True)
+            payload, _ = server.build_digest(conn)
+        self.assertIsNone(payload)
+
     def test_reminder_on_card_fires(self):
         with server.connect() as conn:
-            remind = (date.today() + timedelta(days=1)).isoformat()
-            self._insert_card(conn, "健身卡", None, remind=remind, remind_on=True)
+            self._insert_card(conn, "健身卡", None, remind=date.today().isoformat(), remind_on=True)
             payload, _ = server.build_digest(conn)
         self.assertIsNotNone(payload)
         self.assertEqual(payload["summary"]["reminders_count"], 1)
         self.assertEqual(payload["reminders"][0]["kind"], "card")
+
+    def test_expired_card_is_not_reported_as_expiring(self):
+        """已过期 100 天的卡不该出现在「30 天内过期」——页面侧以前只有上界没有下界。"""
+        with server.connect() as conn:
+            self._insert_card(conn, "早就过期的卡", (date.today() - timedelta(days=100)).isoformat())
+            payload, _ = server.build_digest(conn)
+        self.assertIsNone(payload, "过期的卡不属于「将过期」提醒")
 
     def test_item_is_not_listed_twice(self):
         """同一项既到期又在提醒窗口内时，只出现一次。"""
@@ -124,19 +158,20 @@ class DigestTests(unittest.TestCase):
         self.assertEqual(payload["summary"]["reminders_count"], 0)
         self.assertEqual(payload["body"].count("房租"), 1)
 
-    def test_reminder_outside_window_is_ignored(self):
+    def test_reminder_outside_due_window_is_still_deduped(self):
+        """提醒日已到、且 end_date 也在 7 天内 → 只进「待扣费」，不再进「自设提醒」。"""
         with server.connect() as conn:
-            far = (date.today() + timedelta(days=90)).isoformat()
-            remind = (date.today() + timedelta(days=30)).isoformat()
-            self._insert_sub(conn, "年费会员", far, 199.0, remind=remind, remind_on=True)
+            soon = (date.today() + timedelta(days=1)).isoformat()
+            remind = (date.today() - timedelta(days=1)).isoformat()
+            self._insert_sub(conn, "房租", soon, 3300.0, remind=remind, remind_on=True)
             payload, _ = server.build_digest(conn)
-        self.assertIsNone(payload)
+        self.assertEqual(payload["summary"]["upcoming_subscriptions_count"], 1)
+        self.assertEqual(payload["summary"]["reminders_count"], 0)
 
     def test_disabled_reminder_is_ignored(self):
         with server.connect() as conn:
             far = (date.today() + timedelta(days=90)).isoformat()
-            remind = (date.today() + timedelta(days=3)).isoformat()
-            self._insert_sub(conn, "年费会员", far, 199.0, remind=remind, remind_on=False)
+            self._insert_sub(conn, "年费会员", far, 199.0, remind=date.today().isoformat(), remind_on=False)
             payload, _ = server.build_digest(conn)
         self.assertIsNone(payload)
 
@@ -145,6 +180,52 @@ class DigestTests(unittest.TestCase):
             self._insert_sub(conn, "没填截止日", None)
             payload, _ = server.build_digest(conn)
         self.assertIsNone(payload)
+
+    def test_due_window_boundaries(self):
+        """day 0 与 day 7 进；day 8 不进。"""
+        for offset, expected in ((0, 1), (7, 1), (8, 0)):
+            with self.subTest(offset=offset):
+                tmp = tempfile.mkdtemp()
+                old = server.DB_PATH
+                server.DB_PATH = os.path.join(tmp, "b.db")
+                try:
+                    server.init_db()
+                    with server.connect() as conn:
+                        self._insert_sub(conn, "边界", (date.today() + timedelta(days=offset)).isoformat())
+                        payload, _ = server.build_digest(conn)
+                    got = 0 if payload is None else payload["summary"]["upcoming_subscriptions_count"]
+                    self.assertEqual(got, expected)
+                finally:
+                    server.DB_PATH = old
+                    for name in ("b.db", "b.db-wal", "b.db-shm"):
+                        try:
+                            os.remove(os.path.join(tmp, name))
+                        except OSError:
+                            pass
+                    os.rmdir(tmp)
+
+    def test_card_window_boundaries(self):
+        """卡：day 0 与 day 30 进；day 31 不进。"""
+        for offset, expected in ((0, 1), (30, 1), (31, 0)):
+            with self.subTest(offset=offset):
+                tmp = tempfile.mkdtemp()
+                old = server.DB_PATH
+                server.DB_PATH = os.path.join(tmp, "c.db")
+                try:
+                    server.init_db()
+                    with server.connect() as conn:
+                        self._insert_card(conn, "边界卡", (date.today() + timedelta(days=offset)).isoformat())
+                        payload, _ = server.build_digest(conn)
+                    got = 0 if payload is None else payload["summary"]["expiring_cards_count"]
+                    self.assertEqual(got, expected)
+                finally:
+                    server.DB_PATH = old
+                    for name in ("c.db", "c.db-wal", "c.db-shm"):
+                        try:
+                            os.remove(os.path.join(tmp, name))
+                        except OSError:
+                            pass
+                    os.rmdir(tmp)
 
 
 if __name__ == "__main__":

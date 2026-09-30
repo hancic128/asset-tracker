@@ -2,20 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import { Bell, LogOut, CreditCard, Clock, CheckCircle2, Webhook, ListChecks, BellRing } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Subscription, StoredValueCard } from '@/lib/types';
-import { isExpiringSoon, isNearExpiry, fmtDate, currencySymbol } from '@/lib/utils';
+import { fmtDate, currencySymbol } from '@/lib/utils';
+import { collectReminders, DUE_WINDOW_DAYS, CARD_WINDOW_DAYS } from '@/lib/reminders';
 
 interface Props {
   subs: Subscription[];
   cards: StoredValueCard[];
   webhookConfigured: boolean;
   onSignOut: () => void;
-}
-
-function daysUntil(iso?: string | null): number {
-  if (!iso) return Infinity;
-  const now = new Date();
-  const today = new Date(now.toDateString());
-  return Math.round((new Date(new Date(iso).toDateString()).getTime() - today.getTime()) / 86400000);
 }
 
 export default function Header({ subs, cards, webhookConfigured, onSignOut }: Props) {
@@ -31,30 +25,12 @@ export default function Header({ subs, cards, webhookConfigured, onSignOut }: Pr
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
 
-  const dueSubs = subs
-    .filter((s) => s.status === 'active' && isExpiringSoon(s.end_date))
-    .map((s) => ({ ...s, days: daysUntil(s.end_date) }))
-    .sort((a, b) => a.days - b.days);
+  // 判据全部来自 lib/reminders.ts —— 与每日 webhook 摘要同一套口径
+  const { dueSubs, expiringCards, remindSubs, remindCards, count } = collectReminders(subs, cards);
 
-  const expiringCards = cards
-    .filter((c) => c.status === 'active' && isNearExpiry(c.expires_at))
-    .map((c) => ({ ...c, days: daysUntil(c.expires_at) }))
-    .sort((a, b) => a.days - b.days);
-
-  // explicit renewal reminders the user ticked in the dialog
-  const reminders = [
-    ...subs
-      .filter((s) => s.remind_enabled && s.remind_date && s.status === 'active')
-      .map((s) => ({ key: `s-${s.id}`, name: s.name, date: s.remind_date as string, days: daysUntil(s.remind_date) })),
-    ...cards
-      .filter((c) => c.remind_enabled && c.remind_date && c.status === 'active')
-      .map((c) => ({ key: `c-${c.id}`, name: c.name, date: c.remind_date as string, days: daysUntil(c.remind_date) })),
-  ]
-    .filter((r) => r.days >= -30 && r.days <= 30)
-    .sort((a, b) => a.days - b.days);
-
-  const count = dueSubs.length + expiringCards.length + reminders.length;
-  const dayLabel = (d: number) => (d <= 0 ? t('notify.today') : t('notify.daysLeft', { n: d }));
+  // 已过时给「已过 N 天」，别说成「今天」
+  const dayLabel = (d: number) =>
+    d < 0 ? t('notify.overdue', { n: -d }) : d === 0 ? t('notify.today') : t('notify.daysLeft', { n: d });
 
   return (
     <header className="flex justify-between items-center mb-6 gap-3">
@@ -108,14 +84,14 @@ export default function Header({ subs, cards, webhookConfigured, onSignOut }: Pr
                       {t('notify.subsDue')} · {dueSubs.length}
                     </p>
                     <ul className="space-y-1">
-                      {dueSubs.map((s) => (
-                        <li key={s.id ?? s.name} className="flex items-center gap-3 py-1.5">
+                      {dueSubs.map((r) => (
+                        <li key={r.item.id ?? r.item.name} className="flex items-center gap-3 py-1.5">
                           <Clock className="w-4 h-4 text-amber-700 shrink-0" />
-                          <span className="text-sm text-ink-900 flex-1 truncate">{s.name}</span>
-                          <span className="text-xs text-amber-700 shrink-0">{dayLabel(s.days)}</span>
+                          <span className="text-sm text-ink-900 flex-1 truncate">{r.item.name}</span>
+                          <span className="text-xs text-amber-700 shrink-0">{dayLabel(r.days)}</span>
                           <span className="text-sm num text-ink-700 shrink-0">
-                            {currencySymbol(s.currency)}
-                            {Number(s.amount).toFixed(0)}
+                            {currencySymbol(r.item.currency)}
+                            {Number(r.item.amount).toFixed(0)}
                           </span>
                         </li>
                       ))}
@@ -123,18 +99,20 @@ export default function Header({ subs, cards, webhookConfigured, onSignOut }: Pr
                   </div>
                 )}
 
-                {reminders.length > 0 && (
+                {(remindSubs.length > 0 || remindCards.length > 0) && (
                   <div className="px-4 pt-3 pb-1">
                     <p className="text-xs font-medium text-ink-500 dark:text-ink-400 mb-2">
-                      {t('notify.reminders')} · {reminders.length}
+                      {t('notify.reminders')} · {remindSubs.length + remindCards.length}
                     </p>
                     <ul className="space-y-1">
-                      {reminders.map((r) => (
-                        <li key={r.key} className="flex items-center gap-3 py-1.5">
+                      {[...remindSubs, ...remindCards].map((r) => (
+                        <li key={`${r.item.id}-${r.item.name}`} className="flex items-center gap-3 py-1.5">
                           <BellRing className="w-4 h-4 text-brand-600 shrink-0" />
-                          <span className="text-sm text-ink-900 dark:text-surface-0 flex-1 truncate">{r.name}</span>
+                          <span className="text-sm text-ink-900 dark:text-surface-0 flex-1 truncate">
+                            {r.item.name}
+                          </span>
                           <span className="text-xs text-brand-600 shrink-0">{dayLabel(r.days)}</span>
-                          <span className="text-xs text-ink-500 dark:text-ink-400 shrink-0">{r.date}</span>
+                          <span className="text-xs text-ink-500 dark:text-ink-400 shrink-0">{r.item.remind_date}</span>
                         </li>
                       ))}
                     </ul>
@@ -147,12 +125,12 @@ export default function Header({ subs, cards, webhookConfigured, onSignOut }: Pr
                       {t('notify.cardsExpiring')} · {expiringCards.length}
                     </p>
                     <ul className="space-y-1">
-                      {expiringCards.map((c) => (
-                        <li key={c.id ?? c.name} className="flex items-center gap-3 py-1.5">
+                      {expiringCards.map((r) => (
+                        <li key={r.item.id ?? r.item.name} className="flex items-center gap-3 py-1.5">
                           <ListChecks className="w-4 h-4 text-amber-700 shrink-0" />
-                          <span className="text-sm text-ink-900 flex-1 truncate">{c.name}</span>
-                          <span className="text-xs text-amber-700 shrink-0">{dayLabel(c.days)}</span>
-                          <span className="text-xs text-ink-500 shrink-0">{fmtDate(c.expires_at)}</span>
+                          <span className="text-sm text-ink-900 flex-1 truncate">{r.item.name}</span>
+                          <span className="text-xs text-amber-700 shrink-0">{dayLabel(r.days)}</span>
+                          <span className="text-xs text-ink-500 shrink-0">{fmtDate(r.item.expires_at)}</span>
                         </li>
                       ))}
                     </ul>
@@ -160,10 +138,15 @@ export default function Header({ subs, cards, webhookConfigured, onSignOut }: Pr
                 )}
               </div>
 
-              <div className="px-4 py-3 border-t border-surface-3 flex items-start gap-2 bg-surface-1">
-                <Webhook className="w-3.5 h-3.5 text-ink-400 shrink-0 mt-0.5" />
-                <p className="text-xs text-ink-500 leading-relaxed">
-                  {webhookConfigured ? t('notify.webhookOn') : t('notify.webhookOff')}
+              <div className="px-4 py-3 border-t border-surface-3 space-y-1.5 bg-surface-1">
+                <div className="flex items-start gap-2">
+                  <Webhook className="w-3.5 h-3.5 text-ink-400 shrink-0 mt-0.5" />
+                  <p className="text-xs text-ink-500 leading-relaxed">
+                    {webhookConfigured ? t('notify.webhookOn') : t('notify.webhookOff')}
+                  </p>
+                </div>
+                <p className="text-[11px] text-ink-400 leading-relaxed">
+                  {t('notify.rules', { due: DUE_WINDOW_DAYS, card: CARD_WINDOW_DAYS })}
                 </p>
               </div>
             </div>

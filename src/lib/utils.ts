@@ -152,11 +152,18 @@ export function isExpiredCard(c: { status: string; expires_at?: string | null })
   return d < new Date(TODAY.toDateString());
 }
 
+/** 储值卡「临近过期」：距今天 0–30 天内。
+ *
+ *  以前只有上界没有下界（`d < today+30`），早就过期的卡也会被打上「临近过期」角标、
+ *  出现在铃铛的「30 天内过期」里，而每日 webhook 摘要用的却是 [0, 30]——同一个概念两套结果。
+ *  现在与 src/lib/reminders.ts / server.py 的 build_digest 对齐：过期的归 isExpiredCard 管。
+ */
 export function isNearExpiry(iso?: string | null): boolean {
   if (!iso) return false;
   const d = parseISO(iso);
   if (!d) return false;
-  return d < new Date(TODAY.getTime() + 30 * 86400000);
+  const today = new Date(TODAY.toDateString());
+  return d >= today && d <= new Date(TODAY.getTime() + 30 * 86400000);
 }
 
 export function computeStats(subs: Subscription[], cards: StoredValueCard[], usdRate = 7.2): Stats {
