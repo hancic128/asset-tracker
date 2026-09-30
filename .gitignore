@@ -1,0 +1,22 @@
+node_modules/
+dist/
+*.log
+*.tsbuildinfo
+vite.config.d.ts
+vite.config.js
+
+# 宿主 / 本地真实配置（样例见 app-deploy/services/asset-tracker/.env.example）
+.env
+.env.local
+.env.server
+
+# SQLite（本地跑 server.py 时落到仓库根）
+*.db
+*.db-wal
+*.db-shm
+data/
+
+.DS_Store
+
+__pycache__/
+*.pyc

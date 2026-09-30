@@ -1,0 +1,49 @@
+name: CI
+
+# 仅手动触发（app-deploy 仓库《部署规范》：个人账户每月 2000 分钟额度，
+# 禁止 push: branches / pull_request 自动跑）。发版的测试由 release.yml 覆盖。
+# 这里保留一份可在打 tag 之前手动跑的「预检」：前端构建 + 后端测试 + 镜像可构建。
+on:
+  workflow_dispatch:
+
+jobs:
+  web:
+    name: 前端类型检查 + 构建
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+
+  server:
+    name: 后端语法检查 + 单元测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python3 -m py_compile server.py
+      - run: python3 -m unittest discover -s tests -v
+
+  image:
+    name: 镜像可构建（不推送）
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+

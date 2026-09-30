@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* === 设计令牌：CSS 变量 === */
+:root {
+  --brand-50: #eef2ff;  --brand-100: #e0e7ff; --brand-500: #6366f1;
+  --brand-600: #4f46e5; --brand-700: #4338ca; --brand-900: #312e81;
+  --surface-0: #ffffff; --surface-1: #fafafa;  --surface-2: #f4f4f5;
+  --surface-3: #e4e4e7; --surface-4: #d4d4d8;
+  --ink-900: #18181b;   --ink-700: #3f3f46;    --ink-500: #71717a;
+  --ink-400: #a1a1aa;
+}
+[data-theme='emerald'] {
+  --brand-50: #ecfdf5; --brand-100: #d1fae5; --brand-500: #10b981;
+  --brand-600: #059669; --brand-700: #047857; --brand-900: #064e3b;
+}
+[data-theme='rose'] {
+  --brand-50: #fff1f2; --brand-100: #ffe4e6; --brand-500: #f43f5e;
+  --brand-600: #e11d48; --brand-700: #be123c; --brand-900: #881337;
+}
+[data-theme='amber'] {
+  --brand-50: #fffbeb; --brand-100: #fef3c7; --brand-500: #f59e0b;
+  --brand-600: #d97706; --brand-700: #b45309; --brand-900: #78350f;
+}
+[data-theme='slate'] {
+  --brand-50: #f8fafc; --brand-100: #f1f5f9; --brand-500: #64748b;
+  --brand-600: #475569; --brand-700: #334155; --brand-900: #0f172a;
+}
+.dark {
+  --surface-0: #27272a; --surface-1: #323238; --surface-2: #18181b;
+  --surface-3: #3f3f46; --surface-4: #52525b;
+  --ink-900: #fafafa; --ink-700: #d4d4d8; --ink-500: #a1a1aa; --ink-400: #8b8b93;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+}
+.num { font-variant-numeric: tabular-nums; }
+
+.scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: var(--surface-4); border-radius: 4px; }
+
+.toast-enter { animation: slideIn 0.2s ease-out; }
+@keyframes slideIn {
+  from { transform: translateY(-8px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.icon-spin { animation: spin 1s linear infinite; }
+@keyframes spin {
+  from { transform: rotate(0); }
+  to   { transform: rotate(360deg); }
+}
