@@ -59,6 +59,25 @@ export default function AddCardModal({ open, onClose, onSave, initial, categorie
   const [remindEnabled, setRemindEnabled] = useState(initial?.remind_enabled ?? false);
   const [remindDate, setRemindDate] = useState(initial?.remind_date ?? '');
 
+  // 见 AddSubscriptionModal 同名注释：父组件常驻树，useState 只在挂载时跑一次；
+  // 这里在 open 切换到 true 或 initial.id 变化时把表单重置，避免上次的输入残留。
+  useEffect(() => {
+    if (!open) return;
+    setName(initial?.name ?? '');
+    setType(initial?.type === 'count' ? 'count' : 'amount');
+    setCurrency(initial?.currency ?? 'CNY');
+    setInitialAmount(String(initial?.initial_amount ?? ''));
+    setRemainingAmount(String(initial?.remaining_amount ?? ''));
+    setInitialUses(String(initial?.initial_uses ?? ''));
+    setRemainingUses(String(initial?.remaining_uses ?? ''));
+    setExpiresAt(initial?.expires_at ?? '');
+    setCategory(initial?.category ?? '');
+    setStatus(initial?.status ?? 'active');
+    setRemindEnabled(initial?.remind_enabled ?? false);
+    setRemindDate(initial?.remind_date ?? '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initial]);
+
   // default the reminder to three days before the expiry
   useEffect(() => {
     if (!remindEnabled || remindDate || !expiresAt) return;

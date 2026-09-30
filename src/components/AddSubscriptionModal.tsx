@@ -53,6 +53,33 @@ export default function AddSubscriptionModal({ open, onClose, onSave, initial, c
   const [remindEnabled, setRemindEnabled] = useState(initial?.remind_enabled ?? false);
   const [remindDate, setRemindDate] = useState(initial?.remind_date ?? '');
 
+  // 父组件一直挂在树上（不在 open=false 时卸载），useState 的初始值只在挂载时跑一次。
+  // 「新增」与「编辑」共用同一个组件，切换目标或重开时必须把表单重置成 defaults/initial，
+  // 否则上一次的输入会一直留在字段里。这里在 open 切换到 true 或 initial 引用变化时全部归位。
+  //
+  // 重要 —— 截止日期的归位必须自己算出来，不能依赖下面的「end date follows start + preset」派生 effect：
+  // 那个 effect 的 deps 是 [startDate, preset, endTouched]，重开时这三个值往往和挂载时相同
+  // （preset 默认 month、startDate 都是今天），React 看 deps 未变就不跑，结果 end_date 一直空着。
+  useEffect(() => {
+    if (!open) return;
+    setName(initial?.name ?? '');
+    setAmount(String(initial?.amount ?? ''));
+    setCurrency(initial?.currency ?? 'CNY');
+    const preset0 = (initial?.period_preset ?? 'month') as PeriodPreset;
+    setPreset(preset0);
+    const start0 = initial?.start_date ?? toISO(new Date());
+    setStartDate(start0);
+    const days0 = preset0 === 'custom' ? (initial?.period_days ?? 30) : (PERIOD_DAYS[preset0] ?? 30);
+    setEndDate(initial?.end_date ?? addDays(start0, days0));
+    setEndTouched(!!initial?.end_date);
+    setCategory(initial?.category ?? '');
+    setStatus(initial?.status ?? 'active');
+    setRemindEnabled(initial?.remind_enabled ?? false);
+    setRemindDate(initial?.remind_date ?? '');
+    // initial 作 dep：父组件在 open/cancel/选编辑目标时整体替换 editSub 引用，ref 不变就不触发。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initial]);
+
   const periodOpts: SelectOption[] = (['week', 'month', 'quarter', 'half', 'year', 'custom'] as PeriodPreset[]).map(
     (p) => ({ value: p, label: t(`period.${p}`) }),
   );
