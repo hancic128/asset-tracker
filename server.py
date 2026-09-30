@@ -129,6 +129,10 @@ def hash_password(password: str, salt: bytes | None = None) -> str:
 
 
 def verify_password(password: str, stored: str) -> bool:
+    # 空口令无条件拒绝。这不是多余的：只要谁把「空串的哈希」写进 auth 表，
+    # 缺了这一行就变成「空口令可登录」——2026-09-30 手工重置口令时真踩过一次。
+    if not password or not stored:
+        return False
     try:
         _, rounds, salt_b64, hash_b64 = stored.split("$")
         dk = hashlib.pbkdf2_hmac("sha256", password.encode(), base64.b64decode(salt_b64), int(rounds))
@@ -144,6 +148,8 @@ def password_is_set() -> bool:
 
 
 def set_password(password: str):
+    if not password:
+        raise ValueError("refusing to store an empty password")
     with _db_lock, connect() as conn:
         conn.execute(
             "INSERT INTO auth (id, username, password_hash, updated_at) VALUES (1, 'owner', ?, ?) "
@@ -566,9 +572,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {"error": "bad_json"})
         if not password_is_set():
             return self._json(400, {"error": "not_initialized"})
+        password = data.get("password") or ""
+        if not password:
+            # 空口令直接拒，连库都不查
+            time.sleep(0.4)
+            return self._json(401, {"error": "wrong_password"})
         with connect() as conn:
             row = conn.execute("SELECT password_hash FROM auth WHERE id = 1").fetchone()
-        if not row or not verify_password(data.get("password") or "", row["password_hash"]):
+        if not row or not verify_password(password, row["password_hash"]):
             time.sleep(0.4)  # damp brute force
             return self._json(401, {"error": "wrong_password"})
         return self._json(200, {"token": create_session()})

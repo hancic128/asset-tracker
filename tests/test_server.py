@@ -23,6 +23,34 @@ class PasswordTests(unittest.TestCase):
     def test_malformed_hash_does_not_raise(self):
         self.assertFalse(server.verify_password("x", "not-a-hash"))
 
+    def test_empty_password_never_verifies(self):
+        """空串的哈希也必须拒绝空串。
+
+        2026-09-30 手工重置口令时，脚本从 stdin 读到的是空串（heredoc 抢了 stdin），
+        于是把「空口令的哈希」写进了生产的 auth 表 —— 那一小段时间里
+        POST /api/login {"password": ""} 直接 200。这条测试就是防它复发。
+        """
+        self.assertFalse(server.verify_password("", server.hash_password("")))
+        self.assertFalse(server.verify_password("", ""))
+        self.assertFalse(server.verify_password("goodpassword", ""))
+
+    def test_set_password_refuses_empty(self):
+        self.tmp = tempfile.mkdtemp()
+        old = server.DB_PATH
+        server.DB_PATH = os.path.join(self.tmp, "p.db")
+        try:
+            server.init_db()
+            with self.assertRaises(ValueError):
+                server.set_password("")
+        finally:
+            server.DB_PATH = old
+            for name in ("p.db", "p.db-wal", "p.db-shm"):
+                try:
+                    os.remove(os.path.join(self.tmp, name))
+                except OSError:
+                    pass
+            os.rmdir(self.tmp)
+
 
 class CoerceTests(unittest.TestCase):
     def test_money_and_int_fields(self):
