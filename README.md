@@ -16,6 +16,8 @@ docker run -d --name asset-tracker -p 8085:8085 \
 
 访问 `http://<IP>:8085`，首次登录后设置口令。
 
+![screenshot](docs/screenshot.png)
+
 更多部署方式见 [部署指南](docs/deploy.md)。
 
 ## 特性
