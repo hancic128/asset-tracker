@@ -2,7 +2,7 @@
 """asset-tracker — 订阅与储值卡管理的自托管后端。
 
 单文件、仅标准库：SQLite 存储 + 口令登录 + REST API + 前端静态托管 +
-每日 webhook 摘要。部署形态见 app-deploy/services/asset-tracker。
+每日 webhook 摘要。
 """
 
 import base64

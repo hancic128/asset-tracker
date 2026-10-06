@@ -13,42 +13,70 @@
 - 前后端**同源**（一个进程），因此没有 CORS，也不需要额外的反向代理层
 - PWA：manifest + 图标，可「添加到主屏幕」
 
-## 部署
+## 快速开始
 
-走 `app-deploy` 统一链路（见 Trilium《部署规范》）：
-
-```
-git tag 0.0.1 → push
-  → 本仓库 CI 测试 + 构建镜像推 ghcr.io/hancic128/asset-tracker
-  → repository_dispatch 到 hancic128/app-deploy
-  → app-deploy 把镜像从 ghcr 搬到阿里云 ACR，SSH 到 bj 执行 docker compose pull && up -d
-```
-
-- 配置：`app-deploy/services/asset-tracker/`
-- 宿主：bj `49.232.168.161`，`/root/apps/asset-tracker/`（compose + `.env` + `data/`）
-- 端口：`8085`
-- 入口：bj 上的 hancic-nginx 反代 `https://asset.hancic.site` → `host.docker.internal:8085`
-- 数据：`data/asset-tracker.db`（SQLite）。**备份 = 拷这个目录**
-
-首次部署前宿主上要先备好 `.env`：
+### Docker 部署
 
 ```bash
-ssh root@49.232.168.161
-mkdir -p /root/apps/asset-tracker/data && cd /root/apps/asset-tracker
-# .env 由 app-deploy scp .env.example 过来后自己改，或直接手写
+# 拉镜像（ ghcr.io/hancic128/asset-tracker:latest ）
+docker run -d \
+  --name asset-tracker \
+  -p 8085:8085 \
+  -v ./data:/opt/asset-tracker \
+  -e ASSET_INITIAL_PASSWORD=你的密码 \
+  ghcr.io/hancic128/asset-tracker:latest
+```
+
+访问 `http://<你的服务器IP>:8085`，首次登录后设置口令。
+
+### docker-compose 部署
+
+```yaml
+services:
+  asset-tracker:
+    image: ghcr.io/hancic128/asset-tracker:latest
+    restart: unless-stopped
+    ports:
+      - "8085:8085"
+    volumes:
+      - ./data:/opt/asset-tracker
+    environment:
+      - ASSET_INITIAL_PASSWORD=你的密码   # 首次部署有效，设过则忽略
+      - ASSET_DIGEST_HOUR=9              # 每日 webhook 推送时刻（0-23）
 ```
 
 ### 环境变量
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `ASSET_HOST` | `0.0.0.0` | 监听地址（**别改 127.0.0.1**，nginx 容器要经宿主访问） |
+| `ASSET_HOST` | `0.0.0.0` | 监听地址 |
 | `ASSET_PORT` | `8085` | 监听端口 |
-| `ASSET_DB` | `/opt/asset-tracker/asset-tracker.db` | SQLite 路径（compose 卷内） |
-| `ASSET_STATIC` | `/app/static` | 前端产物目录 |
+| `ASSET_DB` | `/opt/asset-tracker/asset-tracker.db` | SQLite 数据库路径 |
+| `ASSET_STATIC` | `/app/static` | 前端产物目录（不要改） |
 | `ASSET_VERSION` | `dev` | 部署版本，`/health` 与顶栏显示 |
-| `ASSET_INITIAL_PASSWORD` | 空 | 只在库里还没有口令时生效；已设则忽略 |
-| `ASSET_DIGEST_HOUR` | `9` | 每日提醒推送时刻（0-23，Asia/Shanghai） |
+| `ASSET_INITIAL_PASSWORD` | 空 | 首次部署时设置管理员口令；已设则忽略 |
+| `ASSET_DIGEST_HOUR` | `9` | 每日 webhook 推送时刻（0-23，Asia/Shanghai） |
+
+### 数据备份
+
+数据库文件在 `/opt/asset-tracker/asset-tracker.db`（docker-compose 挂载的 `./data` 目录）。备份 = 备份这个目录。
+
+### 反向代理
+
+服务本身不处理 HTTPS，推荐用 nginx / Caddy 等在前面做反代：
+
+```nginx
+# nginx 示例
+server {
+    listen 443 ssl;
+    server_name your-domain.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8085;
+        proxy_set_header Host $host;
+    }
+}
+```
 
 ## 本地开发
 

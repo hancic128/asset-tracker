@@ -2,11 +2,8 @@
 #
 # 前端在 CI 里用 Vite 构建好，产物拷进镜像的 /app/static，由 server.py 直接托管，
 # 因此前端与 API 同源，没有 CORS 问题。
-#
-# 数据落在 /opt/asset-tracker/asset-tracker.db（compose 数据卷提供）。
 
 # ---------- 构建前端 ----------
-# Node 24 = 当前 LTS（node 20 已过维护期，CI 上 actions 已被强制跑在 node 24 上）。
 FROM node:24-alpine AS web
 WORKDIR /web
 COPY package.json package-lock.json ./
