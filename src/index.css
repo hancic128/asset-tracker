@@ -2,55 +2,143 @@
 @tailwind components;
 @tailwind utilities;
 
-/* === 设计令牌：CSS 变量 === */
+/* === 设计令牌：CSS 变量 ===
+ * 方向：Industrial mono + Swiss editorial 三个 token
+ * 配色：单一 indigo brand + warm-tinted neutrals + 3 semantic
+ * 字体：IBM Plex Sans（自托管 via @fontsource）—— 替代默认 Inter slop
+ *
+ * 字体 CSS 通过 main.tsx 显式 import，避免 CSS @import 必须置顶的限制。
+ * DESIGN.md 留底：DESIGN.md 在仓库根；本文件是 token 的 runtime。
+ */
+
+/* ---- light mode tokens（默认） ---- */
 :root {
-  --brand-50: #eef2ff;  --brand-100: #e0e7ff; --brand-500: #6366f1;
-  --brand-600: #4f46e5; --brand-700: #4338ca; --brand-900: #312e81;
-  --surface-0: #ffffff; --surface-1: #fafafa;  --surface-2: #f4f4f5;
-  --surface-3: #e4e4e7; --surface-4: #d4d4d8;
-  --ink-900: #18181b;   --ink-700: #3f3f46;    --ink-500: #71717a;
-  --ink-400: #a1a1aa;
+  /* indigo —— 唯一 brand accent */
+  --brand-50: #eef0fb;
+  --brand-100: #e0e3f8;
+  --brand-500: #6366f1;
+  --brand-600: #4338ca;
+  --brand-700: #3730a3;
+  --brand-900: #1e1b4b;
+
+  /* warm-tinted neutrals —— 偏暖 3-5% 饱和（hue toward yellow/orange） */
+  --surface-0: #faf9f7;   /* 页面底（warm cream） */
+  --surface-1: #f4f1eb;   /* tab/卡片 hover，input bg */
+  --surface-2: #eeead5;   /* 区段分隔、active bg */
+  --surface-3: #e0dace;   /* hairline divider */
+  --surface-4: #c9c2b6;   /* 极弱分隔 */
+
+  --ink-900: #1f1b16;     /* 主文本（warm ink） */
+  --ink-700: #4b4640;     /* 次级文本 */
+  --ink-500: #807a70;     /* 元信息 */
+  --ink-400: #b5afa3;     /* disabled / 占位 */
+
+  /* semantic —— 跟主品牌/中性隔离，避免互相侵蚀 */
+  --ok: #0f766e;          /* teal-700 */
+  --ok-soft: #ecfdf5;
+  --warn: #b45309;        /* amber-700 */
+  --warn-soft: #fef3c7;
+  --danger: #b91c1c;      /* red-700 */
+  --danger-soft: #fee2e2;
 }
-[data-theme='emerald'] {
-  --brand-50: #ecfdf5; --brand-100: #d1fae5; --brand-500: #10b981;
-  --brand-600: #059669; --brand-700: #047857; --brand-900: #064e3b;
-}
-[data-theme='rose'] {
-  --brand-50: #fff1f2; --brand-100: #ffe4e6; --brand-500: #f43f5e;
-  --brand-600: #e11d48; --brand-700: #be123c; --brand-900: #881337;
-}
-[data-theme='amber'] {
-  --brand-50: #fffbeb; --brand-100: #fef3c7; --brand-500: #f59e0b;
-  --brand-600: #d97706; --brand-700: #b45309; --brand-900: #78350f;
-}
-[data-theme='slate'] {
-  --brand-50: #f8fafc; --brand-100: #f1f5f9; --brand-500: #64748b;
-  --brand-600: #475569; --brand-700: #334155; --brand-900: #0f172a;
-}
+
+/* ---- dark mode tokens（warm-tinted darks，elevation via lightness） ---- */
 .dark {
-  --surface-0: #27272a; --surface-1: #323238; --surface-2: #18181b;
-  --surface-3: #3f3f46; --surface-4: #52525b;
-  --ink-900: #fafafa; --ink-700: #d4d4d8; --ink-500: #a1a1aa; --ink-400: #8b8b93;
+  --brand-50: #1b1f33;
+  --brand-100: #232848;
+  --brand-500: #818cf8;
+  --brand-600: #a5b4fc;   /* desaturated ~15% 给 dark 用 */
+  --brand-700: #c7d2fe;
+  --brand-900: #e0e7ff;
+
+  --surface-0: #12141a;   /* 页面底（warm-ink dark） */
+  --surface-1: #18191f;   /* tab/卡片 hover */
+  --surface-2: #1f2128;   /* 区段分隔、active bg */
+  --surface-3: #272a33;   /* hairline divider */
+  --surface-4: #2f323d;
+
+  --ink-900: #f5f1ea;     /* 主文本，非纯白 */
+  --ink-700: #d6d0c5;
+  --ink-500: #a8a39a;
+  --ink-400: #7c776d;
+
+  --ok: #5eead4;
+  --ok-soft: #042f2e;
+  --warn: #fbbf24;
+  --warn-soft: #422006;
+  --danger: #fca5a5;
+  --danger-soft: #450a0a;
 }
 
+/* ---- prefers-color-scheme: dark 跟随系统 ---- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-scheme='light']) {
+    color-scheme: dark;
+  }
+}
+
+/* ---- typography ---- */
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  font-family:
+    'IBM Plex Sans',
+    -apple-system,
+    BlinkMacSystemFont,
+    'PingFang SC',
+    'Microsoft YaHei',
+    sans-serif;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
-.num { font-variant-numeric: tabular-nums; }
 
-.scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
-.scrollbar-thin::-webkit-scrollbar-thumb { background: var(--surface-4); border-radius: 4px; }
+.num {
+  font-variant-numeric: tabular-nums;
+}
 
-.toast-enter { animation: slideIn 0.2s ease-out; }
+/* ---- scrollbar 细节保留 ---- */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--surface-4);
+  border-radius: 4px;
+}
+
+/* ---- motion tokens ---- */
+.toast-enter {
+  animation: slideIn 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
 @keyframes slideIn {
-  from { transform: translateY(-8px); opacity: 0; }
-  to   { transform: translateY(0);    opacity: 1; }
+  from {
+    transform: translateY(-8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
-.icon-spin { animation: spin 1s linear infinite; }
+.icon-spin {
+  animation: spin 1s linear infinite;
+}
 @keyframes spin {
-  from { transform: rotate(0); }
-  to   { transform: rotate(360deg); }
+  from {
+    transform: rotate(0);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- reduced motion 尊重 ---- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

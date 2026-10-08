@@ -12,7 +12,6 @@ import {
   Filler,
 } from 'chart.js';
 import { useTranslation } from 'react-i18next';
-import { Trophy } from 'lucide-react';
 import type { Subscription } from '@/lib/types';
 import { toCNY, amortisedAmount, toISO } from '@/lib/utils';
 
@@ -43,6 +42,14 @@ function startOfDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
+/**
+ * Industrial mono Charts:
+ * - 顶部 section 不再是 card：去 bg/rounded/border/shadow
+ * - 主图：hairline y grid + 隐藏 x grid + 单一 brand-600
+ * - Top10 列表去掉 Trophy 装饰；改为纯文字 + tabular nums
+ * - doughnut 配色：brand 主色 + ink-cool ramp（≤6 色，全在 cool gray 谱内，符合 ≤3 active hues）
+ * - segmented control：active 用 ink-900 bg + 白字；inactive 透明
+ */
 export default function Charts({ subs, usdRate }: Props) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language === 'en-US' ? 'en-US' : 'zh-CN';
@@ -53,7 +60,10 @@ export default function Charts({ subs, usdRate }: Props) {
 
   const brand = cssVar('--brand-600');
   const ink500 = cssVar('--ink-500');
+  const ink700 = cssVar('--ink-700');
   const ink900 = cssVar('--ink-900');
+  const surface0 = cssVar('--surface-0');
+  const surface3 = cssVar('--surface-3');
 
   const cny = useMemo(
     () => active.map((s) => ({ ...s, amountCNY: toCNY(Number(s.amount) || 0, s.currency, usdRate) })),
@@ -158,47 +168,49 @@ export default function Charts({ subs, usdRate }: Props) {
         pointRadius: isMonth ? 3 : 0,
         pointHoverRadius: isMonth ? 5 : 3,
         pointBackgroundColor: brand,
-        pointBorderColor: cssVar('--surface-0'),
+        pointBorderColor: surface0,
         pointBorderWidth: 2,
         borderWidth: isMonth ? 2 : 0,
-        borderRadius: 3,
+        borderRadius: 0,
         maxBarThickness: 28,
       },
     ],
   };
 
+  // Doughnut 配色：brand 主色 + ink-cool ramp（6 色内，cool gray 谱内，符合 ≤3 active hues 精神）
   const pieData = {
     labels: splitData.map(([k]) => k),
     datasets: [
       {
         data: splitData.map(([, v]) => Number(v.toFixed(2))),
-        backgroundColor: [brand, '#10b981', '#f59e0b', '#e11d48', '#64748b', '#0ea5e9', '#a855f7', '#84cc16'],
+        backgroundColor: [brand, '#6B7280', '#9CA3AF', '#4B5563', '#374151', '#1F2937'],
         borderWidth: 0,
       },
     ],
   };
 
   const axisTicks = { color: ink500, font: { size: 11 }, maxRotation: 0, autoSkip: true, autoSkipPadding: 12 };
-  const tooltipBase = { backgroundColor: ink900, padding: 10, cornerRadius: 8, displayColors: false };
+  const tooltipBase = { backgroundColor: ink900, padding: 8, cornerRadius: 0, displayColors: false };
   const yAxis = {
     beginAtZero: true,
-    grid: { color: ink500 + '20' },
-    ticks: { color: ink500, font: { size: 11 }, callback: (v: unknown) => '¥' + v },
+    grid: { color: surface3, drawTicks: false },
+    border: { display: false },
+    ticks: { color: ink500, font: { size: 11 }, padding: 8, callback: (v: unknown) => '¥' + v },
   };
 
   const segBtn = (on: boolean) =>
-    `px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-      on ? 'bg-surface-0 text-brand-600 shadow-sm' : 'text-ink-500 hover:text-ink-700'
+    `px-3 py-1 text-xs font-medium transition-colors ${
+      on ? 'bg-ink-900 text-white' : 'text-ink-500 hover:text-ink-900'
     }`;
 
   return (
-    <section className="bg-surface-0 rounded-xl border border-surface-3 shadow-sm mb-6">
-      <div className="px-4 sm:px-6 pt-4 sm:pt-6 pb-2 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+    <section className="mb-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 pb-4 border-b border-[color:var(--surface-3)]">
         <div>
           <h3 className="text-base font-semibold text-ink-900">{t('chart.title')}</h3>
           <p className="text-xs text-ink-500 mt-0.5">{t('chart.subtitle')}</p>
         </div>
-        <div className="inline-flex bg-surface-2 rounded-lg p-0.5 self-start">
+        <div className="inline-flex border border-[color:var(--surface-3)] self-start">
           {(['month', 'day'] as ViewMode[]).map((m) => (
             <button key={m} onClick={() => setMode(m)} className={segBtn(mode === m)}>
               {m === 'month' ? t('chart.viewMonth') : t('chart.viewDay')}
@@ -207,10 +219,12 @@ export default function Charts({ subs, usdRate }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 px-4 sm:px-6 pb-4 sm:pb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pt-5">
         {/* trend */}
         <div>
-          <p className="text-xs font-medium text-ink-500 mb-3">{isMonth ? t('chart.next12m') : t('chart.next30d')}</p>
+          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-500 mb-3">
+            {isMonth ? t('chart.next12m') : t('chart.next30d')}
+          </p>
           <div className="h-64">
             {isMonth ? (
               <Line
@@ -222,7 +236,10 @@ export default function Charts({ subs, usdRate }: Props) {
                     legend: { display: false },
                     tooltip: { ...tooltipBase, callbacks: { label: (c) => money(Number(c.parsed.y ?? 0)) } },
                   },
-                  scales: { x: { grid: { display: false }, ticks: axisTicks }, y: yAxis },
+                  scales: {
+                    x: { grid: { display: false }, border: { display: false }, ticks: axisTicks },
+                    y: yAxis,
+                  },
                 }}
               />
             ) : (
@@ -235,23 +252,25 @@ export default function Charts({ subs, usdRate }: Props) {
                     legend: { display: false },
                     tooltip: { ...tooltipBase, callbacks: { label: (c) => money(Number(c.parsed.y ?? 0)) } },
                   },
-                  scales: { x: { grid: { display: false }, ticks: axisTicks }, y: yAxis },
+                  scales: {
+                    x: { grid: { display: false }, border: { display: false }, ticks: axisTicks },
+                    y: yAxis,
+                  },
                 }}
               />
             )}
           </div>
         </div>
 
-        {/* top 10 */}
+        {/* top 10 —— 纯文字 + tabular nums，无 Trophy 装饰 */}
         <div>
-          <p className="text-xs font-medium text-ink-500 mb-3 flex items-center gap-1.5">
-            <Trophy className="w-3.5 h-3.5" />
+          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-500 mb-3">
             {t('chart.top10')} · {isMonth ? t('chart.next30d') : t('chart.today')}
           </p>
           {top10.length === 0 ? (
             <div className="py-6 text-center text-xs text-ink-400">{t('chart.noData')}</div>
           ) : (
-            <ul className="space-y-1.5">
+            <ul className="space-y-0 divide-y divide-[color:var(--surface-3)]">
               {top10.map((it, i) => {
                 const value = isMonth ? it.monthly : it.daily;
                 const pct = topMax > 0 ? (value / topMax) * 100 : 0;
@@ -259,16 +278,16 @@ export default function Charts({ subs, usdRate }: Props) {
                   <li
                     key={`${it.name}-${i}`}
                     title={`${it.name}${it.end ? ` · ${it.end}` : ''}`}
-                    className="relative flex items-center gap-2 px-2 py-1.5 rounded-md overflow-hidden"
+                    className="relative flex items-center gap-3 px-1 py-2 overflow-hidden"
                   >
                     <span
                       className="absolute inset-y-0 left-0 bg-brand-600/10"
                       style={{ width: `${pct}%` }}
                       aria-hidden
                     />
-                    <span className="relative w-4 text-xs num text-ink-400 text-right shrink-0">{i + 1}</span>
+                    <span className="relative w-5 text-xs num text-ink-400 text-right shrink-0">{i + 1}</span>
                     <span className="relative flex-1 min-w-0 text-sm text-ink-900 truncate">{it.name}</span>
-                    <span className="relative text-sm num text-ink-900 shrink-0">{money(value)}</span>
+                    <span className="relative text-sm num text-ink-900 shrink-0 font-medium">{money(value)}</span>
                   </li>
                 );
               })}
@@ -279,13 +298,13 @@ export default function Charts({ subs, usdRate }: Props) {
         {/* split */}
         <div>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
-            <p className="text-xs font-medium text-ink-500">
+            <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-500">
               {(split === 'category' ? t('chart.byCategory') : t('chart.byItem')).replace(
                 '{{span}}',
                 isMonth ? t('chart.next30d') : t('chart.today'),
               )}
             </p>
-            <div className="inline-flex bg-surface-2 rounded-lg p-0.5 self-start">
+            <div className="inline-flex border border-[color:var(--surface-3)] self-start">
               {(['category', 'item'] as SplitMode[]).map((s) => (
                 <button key={s} onClick={() => setSplit(s)} className={segBtn(split === s)}>
                   {s === 'category' ? t('chart.splitCategory') : t('chart.splitItem')}
@@ -305,12 +324,12 @@ export default function Charts({ subs, usdRate }: Props) {
                   plugins: {
                     legend: {
                       position: 'right',
-                      labels: { color: ink500, font: { size: 11 }, boxWidth: 12, padding: 10 },
+                      labels: { color: ink700, font: { size: 11 }, boxWidth: 10, boxHeight: 10, padding: 8 },
                     },
                     tooltip: {
                       backgroundColor: ink900,
-                      padding: 10,
-                      cornerRadius: 8,
+                      padding: 8,
+                      cornerRadius: 0,
                       callbacks: { label: (c) => `${c.label}: ${money(c.parsed)}` },
                     },
                   },

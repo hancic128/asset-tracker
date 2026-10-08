@@ -1,14 +1,20 @@
 import type { ThemeName, ColorScheme } from './types';
 
+/**
+ * 唯一持久化外观偏好。
+ * ThemeName 保留类型但只取 'indigo'（DESIGN.md §This design will NOT use）。
+ */
 export const storage = {
   get theme(): ThemeName {
-    return (localStorage.getItem('theme') as ThemeName) || 'indigo';
+    return 'indigo';
   },
-  set theme(v: ThemeName) {
-    localStorage.setItem('theme', v);
+  /** 兼容旧调用方；忽略写入（不提供切换）。 */
+  set theme(_v: ThemeName) {
+    /* noop —— 5 主题已砍掉 */
   },
   get colorScheme(): ColorScheme {
-    return (localStorage.getItem('colorScheme') as ColorScheme) || 'light';
+    const v = localStorage.getItem('colorScheme');
+    return v === 'dark' || v === 'system' || v === 'light' ? v : 'system';
   },
   set colorScheme(v: ColorScheme) {
     localStorage.setItem('colorScheme', v);
@@ -17,7 +23,8 @@ export const storage = {
 
 /** Repaint the favicon in the current brand colour so the tab icon tracks the theme. */
 export function applyFavicon() {
-  const color = getComputedStyle(document.documentElement).getPropertyValue('--brand-600').trim() || '#4f46e5';
+  const color =
+    getComputedStyle(document.documentElement).getPropertyValue('--brand-600').trim() || '#4338ca';
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" ` +
     `stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
@@ -33,16 +40,46 @@ export function applyFavicon() {
   link.href = href;
 }
 
-export function applyTheme(t: ThemeName) {
-  document.documentElement.setAttribute('data-theme', t);
-  storage.theme = t;
+/**
+ * 应用 brand 主题：当前只有一个 indigo，但保留接口供未来扩展。
+ * 内部重画 favicon 以跟 token 颜色走。
+ */
+export function applyTheme(_t: ThemeName) {
+  document.documentElement.setAttribute('data-theme', 'indigo');
   applyFavicon();
 }
+
+/**
+ * 应用外观（light/dark/system）。
+ * system 模式下由浏览器 prefers-color-scheme 媒体查询驱动 .dark 类的应用；
+ * 我们只设 data-scheme 标签供 CSS 选择器使用，dark 类自身在 system 模式下
+ * 跟随媒体查询。
+ */
 export function applyColorScheme(c: ColorScheme) {
-  document.documentElement.classList.toggle('dark', c === 'dark');
+  const root = document.documentElement;
+  root.setAttribute('data-scheme', c);
+  if (c === 'dark') {
+    root.classList.add('dark');
+  } else if (c === 'light') {
+    root.classList.remove('dark');
+  } else {
+    // system：让 @media (prefers-color-scheme: dark) 自动决定
+    root.classList.toggle('dark', matchMedia('(prefers-color-scheme: dark)').matches);
+  }
   storage.colorScheme = c;
 }
+
+let mmListener: ((e: MediaQueryListEvent) => void) | null = null;
+
+/** 启动外观：固定 indigo 主题 + 应用保存的 scheme；system 模式监听系统变化。 */
 export function initTheme() {
-  applyTheme(storage.theme);
+  applyTheme('indigo');
   applyColorScheme(storage.colorScheme);
+  if (mmListener) {
+    matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', mmListener);
+  }
+  mmListener = () => {
+    if (storage.colorScheme === 'system') applyColorScheme('system');
+  };
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', mmListener);
 }

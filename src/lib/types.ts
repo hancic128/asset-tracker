@@ -2,8 +2,20 @@ export type Status = 'active' | 'paused' | 'cancelled' | 'renewed' | 'depleted' 
 export type CardType = 'amount' | 'count';
 export type PeriodPreset = 'week' | 'month' | 'quarter' | 'half' | 'year' | 'custom';
 export type Currency = 'CNY' | 'USD';
-export type ThemeName = 'indigo' | 'emerald' | 'rose' | 'amber' | 'slate';
-export type ColorScheme = 'light' | 'dark';
+
+/**
+ * ThemeName 保留类型以避免破坏其他模块的引用，但实际**只取 'indigo'**。
+ * 砍掉了 5 主题切换（DESIGN.md §This design will NOT use 第 1 条）。
+ * 如果未来重新引入多主题，可以基于此 union 扩展。
+ */
+export type ThemeName = 'indigo';
+
+/**
+ * 外观模式：浅色 / 深色 / 跟随系统。
+ * 与 DESIGN.md §This design will NOT use 第 1 条对齐。
+ */
+export type ColorScheme = 'light' | 'dark' | 'system';
+
 export type Tab = 'subscriptions' | 'cards';
 
 export interface Subscription {

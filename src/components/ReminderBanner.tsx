@@ -13,7 +13,8 @@ interface Props {
 
 const DISMISS_KEY = 'asset_tracker_reminder_dismissed';
 
-/** 顶部横幅。数字直接来自 collectReminders —— 与铃铛、每日 webhook 同一套口径。 */
+/** 顶部横幅。数字直接来自 collectReminders —— 与铃铛、每日 webhook 同一套口径。
+ *  Industrial mono: 单边 hairline + bg-tinted，无圆角无 shadow。 */
 export default function ReminderBanner({ due, expiringCards, reminders }: Props) {
   const { t } = useTranslation();
   const signature = `${due}:${expiringCards}:${reminders}`;
@@ -48,9 +49,9 @@ export default function ReminderBanner({ due, expiringCards, reminders }: Props)
   if (reminders) parts.push(t('reminder.partReminders', { n: reminders }));
 
   return (
-    <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
-      <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-      <div className="flex-1 text-sm text-amber-700">
+    <div className="mb-6 border-l-2 border-warn bg-warn-soft px-4 py-3 flex items-start gap-3">
+      <AlertTriangle className="w-5 h-5 text-warn shrink-0 mt-0.5" />
+      <div className="flex-1 text-sm text-warn">
         <p className="font-medium">{t('reminder.text')}</p>
         <p className="mt-0.5">{parts.join(' · ')}</p>
       </div>
@@ -59,7 +60,7 @@ export default function ReminderBanner({ due, expiringCards, reminders }: Props)
         onClick={dismiss}
         aria-label={t('action.dismiss')}
         title={t('action.dismiss')}
-        className="text-amber-700 hover:opacity-70 transition-opacity shrink-0"
+        className="text-warn hover:opacity-70 transition-opacity shrink-0"
       >
         <X className="w-4 h-4" />
       </button>

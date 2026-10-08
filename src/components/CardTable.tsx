@@ -110,7 +110,7 @@ export default function CardTable({
                 setPage(1);
               }}
               placeholder={t('table.search')}
-              className="w-full bg-surface-1 border border-surface-3 rounded-lg pl-8 pr-3 py-1.5 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-colors"
+              className="w-full bg-surface-1 border border-[color:var(--surface-3)] pl-8 pr-3 py-1.5 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-600 outline-none transition-colors"
             />
           </div>
           <Select
@@ -164,7 +164,7 @@ export default function CardTable({
               setPage(1);
             }}
             placeholder={t('table.search')}
-            className="w-full bg-surface-1 border border-surface-3 rounded-lg pl-8 pr-3 py-1.5 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-colors"
+            className="w-full bg-surface-1 border border-[color:var(--surface-3)] pl-8 pr-3 py-1.5 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-600 outline-none transition-colors"
           />
         </div>
         <Select
@@ -200,7 +200,7 @@ export default function CardTable({
       <div className="overflow-x-auto scrollbar-thin">
         <table className="w-full text-sm min-w-[640px]">
           <thead>
-            <tr className="text-left text-ink-500 border-b border-surface-3">
+            <tr className="text-left text-ink-500 border-b border-[color:var(--surface-3)]">
               <th className="py-3 px-3 font-medium">
                 <button
                   onClick={() => clickSort('name')}
@@ -260,7 +260,7 @@ export default function CardTable({
               <th className="py-3 px-3 font-medium text-right">{t('table.actions')}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-surface-3">
+          <tbody className="divide-y divide-[color:var(--surface-3)]">
             {pg.slice.map((c) => {
               const lowBalance =
                 Number(c.initial_amount) > 0 && Number(c.remaining_amount) < Number(c.initial_amount) * 0.2;
@@ -270,14 +270,14 @@ export default function CardTable({
                   <td className="py-3 px-3 font-medium text-ink-900">{c.name}</td>
                   <td className="py-3 px-3 text-ink-500 hidden md:table-cell">{typeLabel(c.type as CardType, t)}</td>
                   <td className="py-3 px-3 text-ink-500 hidden md:table-cell">{c.category || '—'}</td>
-                  <td className={`py-3 px-3 text-right num ${lowBalance ? 'text-amber-700' : ''}`}>
+                  <td className={`py-3 px-3 text-right num ${lowBalance ? 'text-warn' : ''}`}>
                     {currencySymbol(c.currency)}
                     {Number(c.remaining_amount || 0).toFixed(2)}
                   </td>
                   <td className="py-3 px-3 text-right num hidden md:table-cell">{c.remaining_uses || 0}</td>
-                  <td className={`py-3 px-3 ${nearExpiry ? 'text-amber-700' : ''}`}>{fmtDate(c.expires_at)}</td>
+                  <td className={`py-3 px-3 ${nearExpiry ? 'text-warn' : ''}`}>{fmtDate(c.expires_at)}</td>
                   <td className="py-3 px-3">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded ${statusClass(c.status as Status)}`}>
+                    <span className={`text-xs font-medium px-2 py-0.5 ${statusClass(c.status as Status)}`}>
                       {statusLabel(c.status, t)}
                     </span>
                   </td>
@@ -285,14 +285,14 @@ export default function CardTable({
                     <button
                       onClick={() => onEdit(c)}
                       aria-label={t('table.edit')}
-                      className="w-8 h-8 rounded-lg text-ink-500 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/30 inline-flex items-center justify-center transition-colors"
+                      className="w-8 h-8 text-ink-500 hover:text-brand-600 hover:bg-surface-2  inline-flex items-center justify-center transition-colors"
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => onDelete(c)}
                       aria-label={t('table.delete')}
-                      className="w-8 h-8 rounded-lg text-ink-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 inline-flex items-center justify-center transition-colors ml-1"
+                      className="w-8 h-8 text-ink-500 hover:text-danger hover:bg-danger-soft  inline-flex items-center justify-center transition-colors ml-1"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -308,11 +308,11 @@ export default function CardTable({
         <span>{t('table.page', { page: pg.page, total: pg.totalPages })}</span>
       </div>
       {pg.totalPages > 1 && (
-        <div className="flex items-center justify-between mt-4 pt-4 border-t border-surface-3">
+        <div className="flex items-center justify-between mt-4 pt-4 border-t border-[color:var(--surface-3)]">
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="px-3 py-1.5 text-sm font-medium rounded-lg text-ink-700 hover:bg-surface-2 transition-colors flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 text-sm font-medium text-ink-700 hover:bg-surface-2 transition-colors flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <ChevronLeft className="w-4 h-4" /> {t('table.prev')}
           </button>
@@ -321,7 +321,7 @@ export default function CardTable({
               <button
                 key={p}
                 onClick={() => setPage(p)}
-                className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${p === page ? 'bg-brand-600 text-white' : 'text-ink-700 hover:bg-surface-2 '}`}
+                className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${p === page ? 'bg-ink-900 text-white' : 'text-ink-700 hover:bg-surface-2 '}`}
               >
                 {p}
               </button>
@@ -330,7 +330,7 @@ export default function CardTable({
           <button
             onClick={() => setPage((p) => Math.min(pg.totalPages, p + 1))}
             disabled={page === pg.totalPages}
-            className="px-3 py-1.5 text-sm font-medium rounded-lg text-ink-700 hover:bg-surface-2 transition-colors flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 text-sm font-medium text-ink-700 hover:bg-surface-2 transition-colors flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed"
           >
             {t('table.next')} <ChevronRight className="w-4 h-4" />
           </button>

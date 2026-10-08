@@ -198,7 +198,7 @@ export default function App() {
 
   return (
     <>
-      <div className="min-h-screen bg-surface-2 text-ink-900 transition-colors duration-200">
+      <div className="min-h-screen bg-surface-0 text-ink-900 transition-colors duration-fast ease-mechanical">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
           <Header
             subs={data.subs}
@@ -216,9 +216,9 @@ export default function App() {
           />
 
           {data.error && (
-            <div className="mb-6 bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 rounded-xl px-4 py-3 flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-rose-700 dark:text-rose-500 shrink-0 mt-0.5" />
-              <div className="flex-1 text-sm text-rose-700 dark:text-rose-500">
+            <div className="mb-6 border-l-2 border-danger bg-danger-soft px-4 py-3 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
+              <div className="flex-1 text-sm text-danger">
                 <p className="font-medium">{i18n.t('errors.loadFailed')}</p>
                 <button onClick={data.reload} className="text-xs mt-1 underline hover:no-underline">
                   {i18n.t('action.refresh')}
@@ -230,17 +230,17 @@ export default function App() {
           <StatCards stats={stats} />
           <Charts subs={data.subs} usdRate={data.usdRate} />
 
-          <section className="bg-surface-0 rounded-xl border border-surface-3 shadow-sm">
-            <div className="border-b border-surface-3 flex items-center px-1 overflow-x-auto scrollbar-thin">
+          <section>
+            <div className="border-b border-[color:var(--surface-3)] flex items-center px-1 overflow-x-auto scrollbar-thin">
               <button
                 onClick={() => setTab('subscriptions')}
-                className={`px-4 sm:px-5 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${tab === 'subscriptions' ? 'border-brand-600 text-brand-600' : 'border-transparent text-ink-500 hover:text-ink-700 '}`}
+                className={`px-4 sm:px-5 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${tab === 'subscriptions' ? 'border-ink-900 text-ink-900' : 'border-transparent text-ink-500 hover:text-ink-700'}`}
               >
                 {i18n.t('tab.subscriptions')} <span className="text-xs text-ink-400 ml-1">({data.subs.length})</span>
               </button>
               <button
                 onClick={() => setTab('cards')}
-                className={`px-4 sm:px-5 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${tab === 'cards' ? 'border-brand-600 text-brand-600' : 'border-transparent text-ink-500 hover:text-ink-700 '}`}
+                className={`px-4 sm:px-5 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${tab === 'cards' ? 'border-ink-900 text-ink-900' : 'border-transparent text-ink-500 hover:text-ink-700'}`}
               >
                 {i18n.t('tab.cards')} <span className="text-xs text-ink-400 ml-1">({data.cards.length})</span>
               </button>
@@ -250,7 +250,7 @@ export default function App() {
                     setEditSub(undefined);
                     setAddSubOpen(true);
                   }}
-                  className="bg-brand-600 text-white text-sm font-medium rounded-lg px-4 py-2 hover:bg-brand-700 transition-colors flex items-center gap-2"
+                  className="bg-ink-900 text-white text-sm font-medium px-4 py-2 hover:bg-ink-700 transition-colors flex items-center gap-2"
                   aria-label="add-subscription"
                 >
                   <Plus className="w-4 h-4" />
@@ -261,7 +261,7 @@ export default function App() {
                     setEditCard(undefined);
                     setAddCardOpen(true);
                   }}
-                  className="bg-surface-0 border border-surface-3 text-ink-700 text-sm font-medium rounded-lg px-4 py-2 hover:bg-surface-2 transition-colors flex items-center gap-2"
+                  className="bg-transparent border border-[color:var(--surface-3)] text-ink-700 text-sm font-medium px-4 py-2 hover:bg-surface-1 transition-colors flex items-center gap-2"
                   aria-label="add-card"
                 >
                   <CreditCard className="w-4 h-4" />

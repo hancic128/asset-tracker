@@ -21,7 +21,7 @@ export default function Footer() {
   const deployed = info ? formatTime(info.deployedAt, i18n.language) : '—';
 
   return (
-    <footer className="mt-8 pt-4 pb-2 border-t border-surface-3 text-xs text-ink-500 flex flex-wrap items-center gap-x-3 gap-y-1">
+    <footer className="mt-8 pt-4 pb-2 border-t border-[color:var(--surface-3)] text-xs text-ink-500 flex flex-wrap items-center gap-x-3 gap-y-1">
       <span className="font-mono">v{version}</span>
       <span aria-hidden>·</span>
       <span>部署 {deployed}</span>
