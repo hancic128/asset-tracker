@@ -9,6 +9,8 @@ import {
   ArrowUpDown,
   Search,
   CreditCard,
+  CalendarPlus,
+  Ban,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { StoredValueCard, Status, CardType } from '@/lib/types';
@@ -19,7 +21,9 @@ import {
   statusLabel,
   getSortedFiltered,
   paginate,
-  isExpiredCard,
+  isTerminalCard,
+  isOverdueCard,
+  daysOverdue,
   typeLabel,
   currencySymbol,
 } from '@/lib/utils';
@@ -42,11 +46,14 @@ interface Props {
   onShowExpired: (v: boolean) => void;
   onEdit: (c: StoredValueCard) => void;
   onDelete: (c: StoredValueCard) => void;
+  onExtend?: (c: StoredValueCard) => void;
+  onEnd?: (c: StoredValueCard) => void;
 }
 
 const statusOpts = (t: (k: string) => string): SelectOption[] => [
   { value: 'all', label: t('status.all') },
   { value: 'active', label: t('status.active') },
+  { value: 'overdue', label: t('status.overdue') },
   { value: 'depleted', label: t('status.depleted') },
   { value: 'expired', label: t('status.expired') },
 ];
@@ -73,16 +80,39 @@ export default function CardTable({
   onShowExpired,
   onEdit,
   onDelete,
+  onExtend,
+  onEnd,
 }: Props) {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>('expires_at');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
-  const visible = useMemo(() => cards.filter((it) => showExpired || !isExpiredCard(it)), [cards, showExpired]);
+  // 选中某个终态筛选时，即便没开「显示已归档」也要能看见匹配项
+  const TERMINAL_FILTERS = new Set(['depleted', 'expired']);
+  const visible = useMemo(
+    () =>
+      cards.filter((it) => {
+        if (!showExpired && isTerminalCard(it) && !TERMINAL_FILTERS.has(filter)) return false;
+        if (filter === 'overdue') return isOverdueCard(it);
+        return true;
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cards, showExpired, filter],
+  );
 
   const sorted = useMemo(
-    () => getSortedFiltered(visible, sortKey, sortDir, search, filter, ['name', 'type', 'category'], filterCategory),
+    // 'overdue' 是派生态（status 仍是 active），已在 visible 里筛过，交给 getSortedFiltered 会再按 status 筛空
+    () =>
+      getSortedFiltered(
+        visible,
+        sortKey,
+        sortDir,
+        search,
+        filter === 'overdue' ? 'all' : filter,
+        ['name', 'type', 'category'],
+        filterCategory,
+      ),
     [visible, sortKey, sortDir, search, filter, filterCategory],
   );
   const pg = useMemo(() => paginate(sorted, page, PAGE_SIZE), [sorted, page]);
@@ -139,7 +169,7 @@ export default function CardTable({
           <Switch
             checked={showExpired}
             onChange={onShowExpired}
-            label={t('table.showExpired')}
+            label={t('table.showArchived')}
             ariaLabel="show-expired"
           />
         </div>
@@ -193,7 +223,7 @@ export default function CardTable({
         <Switch
           checked={showExpired}
           onChange={onShowExpired}
-          label={t('table.showExpired')}
+          label={t('table.showArchived')}
           ariaLabel="show-expired"
         />
       </div>
@@ -265,6 +295,8 @@ export default function CardTable({
               const lowBalance =
                 Number(c.initial_amount) > 0 && Number(c.remaining_amount) < Number(c.initial_amount) * 0.2;
               const nearExpiry = isNearExpiry(c.expires_at);
+              const overdue = isOverdueCard(c);
+              const overdueDays = overdue ? daysOverdue(c.expires_at) : 0;
               return (
                 <tr key={c.id ?? c.name} className="hover:bg-surface-1 transition-colors">
                   <td className="py-3 px-3 font-medium text-ink-900">{c.name}</td>
@@ -275,24 +307,56 @@ export default function CardTable({
                     {Number(c.remaining_amount || 0).toFixed(2)}
                   </td>
                   <td className="py-3 px-3 text-right num hidden md:table-cell">{c.remaining_uses || 0}</td>
-                  <td className={`py-3 px-3 ${nearExpiry ? 'text-warn' : ''}`}>{fmtDate(c.expires_at)}</td>
+                  <td
+                    className={`py-3 px-3 ${overdue ? 'text-danger font-medium' : nearExpiry ? 'text-warn' : ''}`}
+                  >
+                    {fmtDate(c.expires_at)}
+                  </td>
                   <td className="py-3 px-3">
-                    <span className={`text-xs font-medium px-2 py-0.5 ${statusClass(c.status as Status)}`}>
-                      {statusLabel(c.status, t)}
-                    </span>
+                    {overdue ? (
+                      <span className="text-xs font-medium px-2 py-0.5 bg-danger-soft text-danger">
+                        {t('notify.daysOverdue', { n: overdueDays })}
+                      </span>
+                    ) : (
+                      <span className={`text-xs font-medium px-2 py-0.5 ${statusClass(c.status as Status)}`}>
+                        {statusLabel(c.status, t)}
+                      </span>
+                    )}
                   </td>
                   <td className="py-3 px-3 text-right whitespace-nowrap">
+                    {overdue && (
+                      <button
+                        onClick={() => onEnd?.(c)}
+                        aria-label={t('action.end')}
+                        title={t('action.end')}
+                        className="w-8 h-8 text-ink-500 hover:text-danger hover:bg-danger-soft inline-flex items-center justify-center transition-colors"
+                      >
+                        <Ban className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
                       onClick={() => onEdit(c)}
                       aria-label={t('table.edit')}
-                      className="w-8 h-8 text-ink-500 hover:text-brand-600 hover:bg-surface-2  inline-flex items-center justify-center transition-colors"
+                      title={t('table.edit')}
+                      className="w-8 h-8 text-ink-500 hover:text-brand-600 hover:bg-surface-2 inline-flex items-center justify-center transition-colors"
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
+                    {onExtend && (
+                      <button
+                        onClick={() => onExtend(c)}
+                        aria-label={t('action.extend')}
+                        title={t('action.extend')}
+                        className="w-8 h-8 text-ink-500 hover:text-brand-600 hover:bg-surface-2 inline-flex items-center justify-center transition-colors"
+                      >
+                        <CalendarPlus className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
                       onClick={() => onDelete(c)}
                       aria-label={t('table.delete')}
-                      className="w-8 h-8 text-ink-500 hover:text-danger hover:bg-danger-soft  inline-flex items-center justify-center transition-colors ml-1"
+                      title={t('table.delete')}
+                      className="w-8 h-8 text-ink-500 hover:text-danger hover:bg-danger-soft inline-flex items-center justify-center transition-colors ml-1"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>

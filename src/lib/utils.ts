@@ -38,6 +38,7 @@ export function statusLabel(s: string, t: (k: string) => string): string {
         active: t('status.active'),
         paused: t('status.paused'),
         cancelled: t('status.cancelled'),
+        renewed: t('status.renewed'),
         depleted: t('status.depleted'),
         expired: t('status.expired'),
       } as Record<string, string>
@@ -52,6 +53,7 @@ export function statusClass(s: string): string {
         active: 'bg-emerald-50 text-emerald-700',
         paused: 'bg-amber-50 text-amber-700',
         cancelled: 'bg-surface-2 text-ink-500',
+        renewed: 'bg-surface-2 text-ink-500',
         depleted: 'bg-rose-50 text-rose-700',
         expired: 'bg-rose-50 text-rose-700',
       } as Record<string, string>
@@ -207,27 +209,48 @@ export function isExpiringSoon(iso?: string | null): boolean {
   return d >= today && d <= new Date(TODAY.getTime() + 7 * 86400000);
 }
 
-/** Finished for good: the cycle ended, or the row was cancelled / renewed. */
-export function isExpiredSub(s: { status: string; end_date?: string | null }): boolean {
-  if (s.status === 'cancelled' || s.status === 'renewed' || s.status === 'expired') return true;
-  const d = parseISO(s.end_date);
-  if (!d) return false;
-  return d < new Date(TODAY.toDateString());
+/** 终态：明确结束、归档隐藏，不再参与统计与摊销。
+ *
+ *  与「待处理」严格区分：只有 cancelled / renewed / expired 三个明确终态才算归档。
+ *  active 但过了 end_date 的属于「待处理」（isOverdueSub），默认仍然可见、要提醒 ——
+ *  以前这里把「日期已过」也当终态，订阅到点就凭空消失，既不提醒也不占位。
+ */
+export function isTerminalSub(s: { status: string }): boolean {
+  return s.status === 'cancelled' || s.status === 'renewed' || s.status === 'expired';
 }
 
-/** Finished for good: the card was used up / expired, or its expiry date passed. */
-export function isExpiredCard(c: { status: string; expires_at?: string | null }): boolean {
-  if (c.status === 'depleted' || c.status === 'expired') return true;
+/** 终态：卡已用完 / 已明确过期。 */
+export function isTerminalCard(c: { status: string }): boolean {
+  return c.status === 'depleted' || c.status === 'expired';
+}
+
+/** 待处理：active 订阅已过截止日，还没续订也没结束 —— 仍需用户决策。 */
+export function isOverdueSub(s: { status: string; end_date?: string | null }): boolean {
+  if (s.status !== 'active') return false;
+  const d = parseISO(s.end_date);
+  return !!d && d < new Date(TODAY.toDateString());
+}
+
+/** 待处理：active 卡已过有效期，还没延期也没结束 —— 仍需用户决策。 */
+export function isOverdueCard(c: { status: string; expires_at?: string | null }): boolean {
+  if (c.status !== 'active') return false;
   const d = parseISO(c.expires_at);
-  if (!d) return false;
-  return d < new Date(TODAY.toDateString());
+  return !!d && d < new Date(TODAY.toDateString());
+}
+
+/** 已过期天数（按日期差，不含时刻）。与 server.py 的 days_until 同一口径，
+ *  免得页面说「已过 11 天」而 webhook 说「已过 10 天」。仅对已过期的项有意义。 */
+export function daysOverdue(iso?: string | null): number {
+  const d = parseISO(iso);
+  if (!d) return 0;
+  return Math.max(0, Math.round((new Date(TODAY.toDateString()).getTime() - d.getTime()) / 86400000));
 }
 
 /** 储值卡「临近过期」：距今天 0–30 天内。
  *
  *  以前只有上界没有下界（`d < today+30`），早就过期的卡也会被打上「临近过期」角标、
  *  出现在铃铛的「30 天内过期」里，而每日 webhook 摘要用的却是 [0, 30]——同一个概念两套结果。
- *  现在与 src/lib/reminders.ts / server.py 的 build_digest 对齐：过期的归 isExpiredCard 管。
+ *  现在与 src/lib/reminders.ts / server.py 的 build_digest 对齐：过期的归 isOverdueCard 管。
  */
 export function isNearExpiry(iso?: string | null): boolean {
   if (!iso) return false;

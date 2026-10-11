@@ -13,6 +13,8 @@ import Toast from '@/components/Toast';
 import SettingsModal from '@/components/SettingsModal';
 import AddSubscriptionModal from '@/components/AddSubscriptionModal';
 import AddCardModal from '@/components/AddCardModal';
+import RenewSubscriptionModal, { type RenewPayload } from '@/components/RenewSubscriptionModal';
+import ExtendCardModal from '@/components/ExtendCardModal';
 import LoginPage from '@/components/LoginPage';
 import ChangePasswordModal from '@/components/ChangePasswordModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -22,7 +24,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToasts } from '@/hooks/useToasts';
 import { useData } from '@/hooks/useData';
 import { initTheme } from '@/lib/storage';
-import { computeStats, collectCategories, effectivePeriodDays, addDays, toISO } from '@/lib/utils';
+import { computeStats, collectCategories } from '@/lib/utils';
 import { collectReminders } from '@/lib/reminders';
 import { exportJson, exportCsv, parseImportFile } from '@/lib/exportImport';
 import type { Subscription, StoredValueCard, ThemeName, ColorScheme, Tab } from '@/lib/types';
@@ -57,8 +59,10 @@ export default function App() {
   const [changePwOpen, setChangePwOpen] = useState(false);
   const [webhookConfigured, setWebhookConfigured] = useState(false);
   const [showExpired, setShowExpired] = useState(false);
+  const [renewState, setRenewState] = useState<Subscription | null>(null);
+  const [extendState, setExtendState] = useState<StoredValueCard | null>(null);
   const [confirmState, setConfirmState] = useState<{
-    kind: 'delete-sub' | 'delete-card' | 'renew-sub';
+    kind: 'delete-sub' | 'delete-card' | 'end-sub' | 'end-card';
     item: Subscription | StoredValueCard;
   } | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
@@ -71,28 +75,28 @@ export default function App() {
       .catch(() => {});
   }, [auth.signedIn, data.getSetting]);
 
-  /** Roll a subscription into its next cycle: a copy with shifted dates is
-   *  created and the finished cycle is marked 'renewed', so nothing is counted
-   *  twice and no dates have to be worked out by hand. */
-  const onRenewSubscription = (s: Subscription) => setConfirmState({ kind: 'renew-sub', item: s });
+  /** 续订：打开弹窗预填「新周期」，金额/周期可在其中调整（涨价一次到位）。
+   *  新周期从旧 end_date + 1 天开始 —— 摊销窗口含首尾，若从旧的 end_date 开始会重叠计费一天。 */
+  const onRenewSubscription = (s: Subscription) => setRenewState(s);
 
-  const performRenew = async (s: Subscription) => {
+  /** 确认续订：新建一条 active 新周期，旧周期标记 renewed（离开 active，停止提醒与摊销）。 */
+  const performRenew = async (s: Subscription, p: RenewPayload) => {
     if (s.id == null) return;
     try {
-      const cycle = effectivePeriodDays(s);
-      const start = s.end_date ?? toISO(new Date());
-      const end = addDays(start, cycle);
       const { id, created_at, ...rest } = s;
       await data.addSub({
         ...(rest as Subscription),
-        start_date: start,
-        end_date: end,
+        amount: p.amount,
+        period_preset: p.period_preset,
+        period_days: p.period_days,
+        start_date: p.start_date,
+        end_date: p.end_date,
         status: 'active',
         remind_enabled: false,
         remind_date: null,
       });
       await data.updateSub(s.id, { ...s, status: 'renewed' });
-      show('success', i18n.t('toast.renewed', { name: s.name, date: end }));
+      show('success', i18n.t('toast.renewed', { name: s.name, date: p.end_date }));
     } catch (e: unknown) {
       show('error', String((e as Error)?.message || e));
     }
@@ -109,8 +113,12 @@ export default function App() {
       } else if (kind === 'delete-card' && item.id != null) {
         await data.deleteCard(item.id);
         show('success', i18n.t('toast.deleted'));
-      } else if (kind === 'renew-sub') {
-        await performRenew(item as Subscription);
+      } else if (kind === 'end-sub' && item.id != null) {
+        await data.updateSub(item.id, { ...(item as Subscription), status: 'expired' });
+        show('success', i18n.t('toast.ended', { name: item.name }));
+      } else if (kind === 'end-card' && item.id != null) {
+        await data.updateCard(item.id, { ...(item as StoredValueCard), status: 'expired' });
+        show('success', i18n.t('toast.ended', { name: item.name }));
       }
       setConfirmState(null);
     } catch (e: unknown) {
@@ -173,6 +181,7 @@ export default function App() {
     }
   };
   const onDeleteSubscription = (s: Subscription) => setConfirmState({ kind: 'delete-sub', item: s });
+  const onEndSubscription = (s: Subscription) => setConfirmState({ kind: 'end-sub', item: s });
   const onSaveCard = async (c: StoredValueCard) => {
     try {
       if (c.id) await data.updateCard(c.id, c);
@@ -184,6 +193,17 @@ export default function App() {
     }
   };
   const onDeleteCard = (c: StoredValueCard) => setConfirmState({ kind: 'delete-card', item: c });
+  const onEndCard = (c: StoredValueCard) => setConfirmState({ kind: 'end-card', item: c });
+  /** 延期：直接改 expires_at，卡里余额 / 余次不变。 */
+  const onExtendCard = async (c: StoredValueCard, expiresAt: string) => {
+    if (c.id == null) return;
+    try {
+      await data.updateCard(c.id, { ...c, expires_at: expiresAt });
+      show('success', i18n.t('toast.extended', { name: c.name, date: expiresAt }));
+    } catch (e: unknown) {
+      show('error', String((e as Error)?.message || e));
+    }
+  };
 
   if (auth.loading) {
     return (
@@ -212,6 +232,7 @@ export default function App() {
           <ReminderBanner
             due={reminders.dueSubs.length}
             expiringCards={reminders.expiringCards.length}
+            overdue={reminders.overdueSubs.length + reminders.overdueCards.length}
             reminders={reminders.remindSubs.length + reminders.remindCards.length}
           />
 
@@ -292,6 +313,7 @@ export default function App() {
                   }}
                   onDelete={onDeleteSubscription}
                   onRenew={onRenewSubscription}
+                  onEnd={onEndSubscription}
                 />
               ) : (
                 <CardTable
@@ -310,6 +332,8 @@ export default function App() {
                     setAddCardOpen(true);
                   }}
                   onDelete={onDeleteCard}
+                  onExtend={setExtendState}
+                  onEnd={onEndCard}
                 />
               )}
             </div>
@@ -359,26 +383,43 @@ export default function App() {
         categories={categories}
         onDeleteCategory={data.deleteCategory}
       />
+      <RenewSubscriptionModal
+        open={!!renewState}
+        sub={renewState ?? undefined}
+        onClose={() => setRenewState(null)}
+        onConfirm={(p) => {
+          if (renewState) performRenew(renewState, p);
+          setRenewState(null);
+        }}
+      />
+      <ExtendCardModal
+        open={!!extendState}
+        card={extendState ?? undefined}
+        onClose={() => setExtendState(null)}
+        onConfirm={(d) => {
+          if (extendState) onExtendCard(extendState, d);
+          setExtendState(null);
+        }}
+      />
       <ConfirmDialog
         open={!!confirmState}
-        danger={confirmState?.kind !== 'renew-sub'}
+        danger
         busy={confirmBusy}
         title={
-          confirmState?.kind === 'renew-sub'
-            ? i18n.t('confirm.renewTitle', { name: (confirmState.item as Subscription).name })
+          confirmState?.kind === 'end-sub' || confirmState?.kind === 'end-card'
+            ? i18n.t('confirm.endTitle', { name: confirmState.item.name })
             : i18n.t('confirm.deleteTitle', { name: confirmState?.item?.name ?? '' })
         }
         message={
-          confirmState?.kind === 'renew-sub'
-            ? i18n.t('confirm.renewMsg', {
-                date: addDays(
-                  (confirmState.item as Subscription).end_date ?? toISO(new Date()),
-                  effectivePeriodDays(confirmState.item as Subscription),
-                ),
-              })
+          confirmState?.kind === 'end-sub' || confirmState?.kind === 'end-card'
+            ? i18n.t('confirm.endMsg')
             : i18n.t('confirm.deleteMsg')
         }
-        confirmLabel={confirmState?.kind === 'renew-sub' ? i18n.t('action.renew') : i18n.t('table.delete')}
+        confirmLabel={
+          confirmState?.kind === 'end-sub' || confirmState?.kind === 'end-card'
+            ? i18n.t('action.end')
+            : i18n.t('table.delete')
+        }
         onConfirm={runConfirmed}
         onCancel={() => setConfirmState(null)}
       />

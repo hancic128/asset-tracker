@@ -1,5 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { Bell, LogOut, CreditCard, Clock, CheckCircle2, Webhook, ListChecks, BellRing } from 'lucide-react';
+import {
+  Bell,
+  LogOut,
+  CreditCard,
+  Clock,
+  CheckCircle2,
+  Webhook,
+  ListChecks,
+  BellRing,
+  AlertTriangle,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Subscription, StoredValueCard } from '@/lib/types';
 import { fmtDate, currencySymbol } from '@/lib/utils';
@@ -26,11 +36,16 @@ export default function Header({ subs, cards, webhookConfigured, onSignOut }: Pr
   }, []);
 
   // 判据全部来自 lib/reminders.ts —— 与每日 webhook 摘要同一套口径
-  const { dueSubs, expiringCards, remindSubs, remindCards, count } = collectReminders(subs, cards);
+  const { dueSubs, expiringCards, overdueSubs, overdueCards, remindSubs, remindCards, count } = collectReminders(
+    subs,
+    cards,
+  );
+
+  const overdueAll = [...overdueSubs, ...overdueCards];
 
   // 已过时给「已过 N 天」，别说成「今天」
   const dayLabel = (d: number) =>
-    d < 0 ? t('notify.overdue', { n: -d }) : d === 0 ? t('notify.today') : t('notify.daysLeft', { n: d });
+    d < 0 ? t('notify.daysOverdue', { n: -d }) : d === 0 ? t('notify.today') : t('notify.daysLeft', { n: d });
 
   return (
     <header className="flex justify-between items-center mb-6 gap-3 border-b border-[color:var(--surface-3)] pb-5">
@@ -75,6 +90,23 @@ export default function Header({ subs, cards, webhookConfigured, onSignOut }: Pr
                   <div className="px-4 py-8 text-center">
                     <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-ok" />
                     <p className="text-sm text-ink-500">{t('notify.empty')}</p>
+                  </div>
+                )}
+
+                {overdueAll.length > 0 && (
+                  <div className="px-4 pt-3 pb-1">
+                    <p className="text-xs font-medium text-danger mb-2">
+                      {t('notify.overdue')} · {overdueAll.length}
+                    </p>
+                    <ul className="space-y-1">
+                      {overdueAll.map((r) => (
+                        <li key={`${r.item.id}-${r.item.name}`} className="flex items-center gap-3 py-1.5">
+                          <AlertTriangle className="w-4 h-4 text-danger shrink-0" />
+                          <span className="text-sm text-ink-900 flex-1 truncate">{r.item.name}</span>
+                          <span className="text-xs text-danger shrink-0">{dayLabel(r.days)}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
 

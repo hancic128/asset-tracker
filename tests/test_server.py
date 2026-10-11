@@ -170,11 +170,52 @@ class DigestTests(unittest.TestCase):
         self.assertEqual(payload["reminders"][0]["kind"], "card")
 
     def test_expired_card_is_not_reported_as_expiring(self):
-        """已过期 100 天的卡不该出现在「30 天内过期」——页面侧以前只有上界没有下界。"""
+        """已过期 100 天的卡不该出现在「30 天内过期」——页面侧以前只有上界没有下界。
+        但它应归入「已到期未处理」，而不是凭空消失。"""
         with server.connect() as conn:
             self._insert_card(conn, "早就过期的卡", (date.today() - timedelta(days=100)).isoformat())
             payload, _ = server.build_digest(conn)
-        self.assertIsNone(payload, "过期的卡不属于「将过期」提醒")
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["summary"]["expiring_cards_count"], 0)
+        self.assertEqual(payload["summary"]["overdue_count"], 1)
+        self.assertIn("已到期未处理", payload["body"])
+        self.assertEqual([r["name"] for r in payload["overdue_cards"]], ["早就过期的卡"])
+
+    def test_overdue_subscription_is_reported(self):
+        """已过期 5 天的订阅 → 进「已到期未处理」，持续提醒直到续订 / 结束。"""
+        with server.connect() as conn:
+            self._insert_sub(conn, "忘记续的订阅", (date.today() - timedelta(days=5)).isoformat(), 68.0)
+            payload, _ = server.build_digest(conn)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["summary"]["overdue_count"], 1)
+        self.assertEqual(payload["summary"]["upcoming_subscriptions_count"], 0)
+        self.assertIn("忘记续的订阅", payload["body"])
+        self.assertIn("已过 5 天", payload["body"])
+        self.assertIn("已到期未处理", payload["title"])
+        self.assertEqual([r["name"] for r in payload["overdue_subscriptions"]], ["忘记续的订阅"])
+
+    def test_overdue_takes_precedence_over_manual_reminder(self):
+        """已到期未处理的项不再重复进「自设提醒」。"""
+        with server.connect() as conn:
+            past = (date.today() - timedelta(days=3)).isoformat()
+            self._insert_sub(conn, "过期又设了提醒", past, 50.0, remind=past, remind_on=True)
+            payload, _ = server.build_digest(conn)
+        self.assertEqual(payload["summary"]["overdue_count"], 1)
+        self.assertEqual(payload["summary"]["reminders_count"], 0)
+        self.assertEqual(payload["body"].count("过期又设了提醒"), 1)
+
+    def test_overdue_not_reported_when_renewed(self):
+        """旧周期已置 renewed（离开 active）后，不再出现在「已到期未处理」。"""
+        with server.connect() as conn:
+            past = (date.today() - timedelta(days=3)).isoformat()
+            now = server.now_iso()
+            conn.execute(
+                "INSERT INTO subscriptions (name, amount, end_date, status, created_at, updated_at)"
+                " VALUES (?, ?, ?, 'renewed', ?, ?)",
+                ("已续订的旧周期", 68.0, past, now, now),
+            )
+            payload, _ = server.build_digest(conn)
+        self.assertIsNone(payload)
 
     def test_item_is_not_listed_twice(self):
         """同一项既到期又在提醒窗口内时，只出现一次。"""

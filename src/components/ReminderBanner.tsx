@@ -7,6 +7,8 @@ interface Props {
   due: number;
   /** 储值卡：30 天内过期 */
   expiringCards: number;
+  /** 已到期未处理：订阅 + 卡 */
+  overdue: number;
   /** 用户自设的续费提醒：已到日 */
   reminders: number;
 }
@@ -15,9 +17,9 @@ const DISMISS_KEY = 'asset_tracker_reminder_dismissed';
 
 /** 顶部横幅。数字直接来自 collectReminders —— 与铃铛、每日 webhook 同一套口径。
  *  Industrial mono: 单边 hairline + bg-tinted，无圆角无 shadow。 */
-export default function ReminderBanner({ due, expiringCards, reminders }: Props) {
+export default function ReminderBanner({ due, expiringCards, overdue, reminders }: Props) {
   const { t } = useTranslation();
-  const signature = `${due}:${expiringCards}:${reminders}`;
+  const signature = `${due}:${expiringCards}:${overdue}:${reminders}`;
   const [dismissed, setDismissed] = useState(false);
 
   // A dismissal is remembered only for the exact set of items it was made
@@ -30,7 +32,7 @@ export default function ReminderBanner({ due, expiringCards, reminders }: Props)
     }
   }, [signature]);
 
-  const total = due + expiringCards + reminders;
+  const total = due + expiringCards + overdue + reminders;
   if (total === 0) return null;
   if (dismissed) return null;
 
@@ -44,6 +46,7 @@ export default function ReminderBanner({ due, expiringCards, reminders }: Props)
   };
 
   const parts: string[] = [];
+  if (overdue) parts.push(t('reminder.partOverdue', { n: overdue }));
   if (due) parts.push(t('reminder.partDue', { n: due }));
   if (expiringCards) parts.push(t('reminder.partCards', { n: expiringCards }));
   if (reminders) parts.push(t('reminder.partReminders', { n: reminders }));

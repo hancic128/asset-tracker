@@ -123,12 +123,19 @@
 
 ```json
 {
-  "title": "资产管理 · N 个订阅待扣费 / N 张卡待过期",
+  "title": "资产管理 · N 个订阅待扣费 / N 张卡待过期 / N 项已到期未处理",
   "body": "人类可读摘要文本",
   "event": "asset_tracker.digest",
   "repo": "asset-tracker",
   "type": "asset_tracker.digest",
   "at": "2024-01-01T09:00:00+08:00",
+  "overdue_subscriptions": [
+    {"name": "...", "amount": 30, "days": -10, "end_date": "2023-12-22", "category": "视频"}
+  ],
+  "overdue_cards": [
+    {"name": "...", "type": "amount", "days": -5, "expires_at": "2023-12-27",
+     "remaining_amount": 50, "remaining_uses": null}
+  ],
   "upcoming_subscriptions": [
     {"name": "...", "amount": 30, "days": 3, "end_date": "2024-01-04", "category": "视频"}
   ],
@@ -136,11 +143,23 @@
     {"name": "...", "type": "amount", "days": 7, "expires_at": "2024-01-08",
      "remaining_amount": 50, "remaining_uses": null}
   ],
+  "reminders": [
+    {"name": "...", "kind": "subscription", "days": 0, "remind_date": "2024-01-01"}
+  ],
   "summary": {
+    "overdue_count": 2,
     "upcoming_subscriptions_count": 2,
     "expiring_cards_count": 1,
     "reminders_count": 0,
-    "total": 3
+    "total": 5
   }
 }
 ```
+
+口径（与前端 `src/lib/reminders.ts` 的 `collectReminders` 一致）：
+
+- `upcoming_subscriptions`：`active` 且 `end_date` 落在今天起 7 天内
+- `expiring_cards`：`active` 且 `expires_at` 落在今天起 30 天内
+- `overdue_subscriptions` / `overdue_cards`：`active` 且日期已过（`days < 0`）——已到期但尚未续订 / 结束，**持续提醒直到状态改变**（续订后旧周期置 `renewed` 离开 `active`）
+- `reminders`：用户自填的 `remind_date` 已到或已过，且未被上面三类覆盖
+- 同一项只会出现在一个分组里

@@ -264,6 +264,21 @@ def build_digest(conn):
     # 否则「页面内提醒」与「每日 webhook」会各说各话（历史上就是这样）。
     DUE_WINDOW_DAYS, CARD_WINDOW_DAYS = 7, 30
 
+    # 已到期未处理：active 但日期已过（d < 0）。以前完全没有这一类，订阅一过期就
+    # 既不出现在页面也不进摘要，等于人间蒸发。现在持续提醒，直到续订 / 结束改变状态。
+    overdue_subs = []
+    overdue_cards = []
+    for s in subs:
+        d = days_until(s["end_date"])
+        if d is not None and d < 0:
+            overdue_subs.append((d, s))
+    overdue_subs.sort(key=lambda t: t[0])
+    for c in cards:
+        d = days_until(c["expires_at"])
+        if d is not None and d < 0:
+            overdue_cards.append((d, c))
+    overdue_cards.sort(key=lambda t: t[0])
+
     due = []
     for s in subs:
         d = days_until(s["end_date"])
@@ -281,9 +296,9 @@ def build_digest(conn):
     # 用户手填的「到期续费提醒」日期（remind_enabled + remind_date）。
     # 口径：到日即响（d <= 0），不设上界；也不设下界——续订会把旧周期置 renewed，
     # 该项随即离开 active，所以不会无限期地响下去。
-    # 只取没被上面两块覆盖的项，避免同一项在通知里出现两次。
-    sub_covered = {s["id"] for _, s in due}
-    card_covered = {c["id"] for _, c in expiring}
+    # 只取没被上面几块覆盖的项，避免同一项在通知里出现两次。
+    sub_covered = {s["id"] for _, s in due} | {s["id"] for _, s in overdue_subs}
+    card_covered = {c["id"] for _, c in expiring} | {c["id"] for _, c in overdue_cards}
     reminded = []
     for s in subs:
         d = days_until(s["remind_date"])
@@ -297,7 +312,7 @@ def build_digest(conn):
     reminded.sort(key=lambda t: t[0])
     reminded_cards.sort(key=lambda t: t[0])
 
-    if not due and not expiring and not reminded and not reminded_cards:
+    if not overdue_subs and not overdue_cards and not due and not expiring and not reminded and not reminded_cards:
         return None, settings
 
     def when(d):
@@ -307,7 +322,15 @@ def build_digest(conn):
         return "今天" if d == 0 else f"{d} 天后"
 
     lines = []
+    if overdue_subs or overdue_cards:
+        lines.append(f"已到期未处理（{len(overdue_subs) + len(overdue_cards)}）")
+        for d, s in overdue_subs:
+            lines.append(f"· {s['name']}  ¥{float(s['amount']):.2f} · {when(d)}（{s['end_date']}）")
+        for d, c in overdue_cards:
+            lines.append(f"· {c['name']} · {when(d)}（{c['expires_at']}）")
     if due:
+        if lines:
+            lines.append("")
         lines.append(f"订阅（{len(due)}）")
         for d, s in due:
             lines.append(f"· {s['name']}  ¥{float(s['amount']):.2f} · {when(d)}（{s['end_date']}）")
@@ -326,15 +349,27 @@ def build_digest(conn):
         for d, c in reminded_cards:
             lines.append(f"· {c['name']} · {when(d)}（{c['remind_date']}）")
 
-    total = len(due) + len(expiring) + len(reminded) + len(reminded_cards)
+    overdue_count = len(overdue_subs) + len(overdue_cards)
+    total = overdue_count + len(due) + len(expiring) + len(reminded) + len(reminded_cards)
     payload = {
         "title": f"资产管理 · {len(due)} 个订阅待扣费 / {len(expiring)} 张卡待过期"
+        + (f" / {overdue_count} 项已到期未处理" if overdue_count else "")
         + (f" / {len(reminded) + len(reminded_cards)} 条你设的提醒" if reminded or reminded_cards else ""),
         "body": "\n".join(lines),
         "event": "asset_tracker.digest",
         "repo": "asset-tracker",
         "type": "asset_tracker.digest",
         "at": now_iso(),
+        "overdue_subscriptions": [
+            {"name": s["name"], "amount": float(s["amount"]), "days": d, "end_date": s["end_date"],
+             "category": s["category"]}
+            for d, s in overdue_subs
+        ],
+        "overdue_cards": [
+            {"name": c["name"], "type": c["type"], "days": d, "expires_at": c["expires_at"],
+             "remaining_amount": float(c["remaining_amount"]), "remaining_uses": c["remaining_uses"]}
+            for d, c in overdue_cards
+        ],
         "upcoming_subscriptions": [
             {"name": s["name"], "amount": float(s["amount"]), "days": d, "end_date": s["end_date"], "category": s["category"]}
             for d, s in due
@@ -353,6 +388,7 @@ def build_digest(conn):
             for d, c in reminded_cards
         ],
         "summary": {
+            "overdue_count": overdue_count,
             "upcoming_subscriptions_count": len(due),
             "expiring_cards_count": len(expiring),
             "reminders_count": len(reminded) + len(reminded_cards),

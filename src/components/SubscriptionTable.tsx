@@ -9,6 +9,7 @@ import {
   ArrowUpDown,
   Search,
   RefreshCw,
+  Ban,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Subscription, Status } from '@/lib/types';
@@ -19,7 +20,9 @@ import {
   statusLabel,
   getSortedFiltered,
   paginate,
-  isExpiredSub,
+  isTerminalSub,
+  isOverdueSub,
+  daysOverdue,
   currencySymbol,
 } from '@/lib/utils';
 import Select, { type SelectOption } from './Select';
@@ -42,11 +45,13 @@ interface Props {
   onEdit: (s: Subscription) => void;
   onDelete: (s: Subscription) => void;
   onRenew?: (s: Subscription) => void;
+  onEnd?: (s: Subscription) => void;
 }
 
 const statusOpts = (t: (k: string) => string): SelectOption[] => [
   { value: 'all', label: t('status.all') },
   { value: 'active', label: t('status.active') },
+  { value: 'overdue', label: t('status.overdue') },
   { value: 'paused', label: t('status.paused') },
   { value: 'cancelled', label: t('status.cancelled') },
 ];
@@ -74,16 +79,38 @@ export default function SubscriptionTable({
   onEdit,
   onDelete,
   onRenew,
+  onEnd,
 }: Props) {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>('end_date');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
-  const visible = useMemo(() => subs.filter((it) => showExpired || !isExpiredSub(it)), [subs, showExpired]);
+  // 选中某个终态筛选时，即便没开「显示已归档」也要能看见匹配项
+  const TERMINAL_FILTERS = new Set(['cancelled', 'renewed', 'expired']);
+  const visible = useMemo(
+    () =>
+      subs.filter((it) => {
+        if (!showExpired && isTerminalSub(it) && !TERMINAL_FILTERS.has(filter)) return false;
+        if (filter === 'overdue') return isOverdueSub(it);
+        return true;
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [subs, showExpired, filter],
+  );
 
   const sorted = useMemo(
-    () => getSortedFiltered(visible, sortKey, sortDir, search, filter, ['name', 'category'], filterCategory),
+    // 'overdue' 是派生态（status 仍是 active），已在 visible 里筛过，交给 getSortedFiltered 会再按 status 筛空
+    () =>
+      getSortedFiltered(
+        visible,
+        sortKey,
+        sortDir,
+        search,
+        filter === 'overdue' ? 'all' : filter,
+        ['name', 'category'],
+        filterCategory,
+      ),
     [visible, sortKey, sortDir, search, filter, filterCategory],
   );
   const pg = useMemo(() => paginate(sorted, page, PAGE_SIZE), [sorted, page]);
@@ -140,7 +167,7 @@ export default function SubscriptionTable({
           <Switch
             checked={showExpired}
             onChange={onShowExpired}
-            label={t('table.showExpired')}
+            label={t('table.showArchived')}
             ariaLabel="show-expired"
           />
         </div>
@@ -194,7 +221,7 @@ export default function SubscriptionTable({
         <Switch
           checked={showExpired}
           onChange={onShowExpired}
-          label={t('table.showExpired')}
+          label={t('table.showArchived')}
           ariaLabel="show-expired"
         />
       </div>
@@ -250,6 +277,8 @@ export default function SubscriptionTable({
             {pg.slice.map((s) => {
               const daily = Number(s.amount) / Math.max(1, Number(s.period_days));
               const expiring = s.status === 'active' && isExpiringSoon(s.end_date);
+              const overdue = isOverdueSub(s);
+              const overdueDays = overdue ? daysOverdue(s.end_date) : 0;
               return (
                 <tr key={s.id ?? s.name} className="hover:bg-surface-1 transition-colors">
                   <td className="py-3 px-3 font-medium text-ink-900">{s.name}</td>
@@ -261,18 +290,39 @@ export default function SubscriptionTable({
                     {currencySymbol(s.currency)}
                     {daily.toFixed(2)}
                   </td>
-                  <td className={`py-3 px-3 ${expiring ? 'text-warn font-medium' : ''}`}>{fmtDate(s.end_date)}</td>
+                  <td
+                    className={`py-3 px-3 ${overdue ? 'text-danger font-medium' : expiring ? 'text-warn font-medium' : ''}`}
+                  >
+                    {fmtDate(s.end_date)}
+                  </td>
                   <td className="py-3 px-3 text-ink-500 hidden md:table-cell">{s.category || '—'}</td>
                   <td className="py-3 px-3">
-                    <span className={`text-xs font-medium px-2 py-0.5 ${statusClass(s.status as Status)}`}>
-                      {statusLabel(s.status, t)}
-                    </span>
+                    {overdue ? (
+                      <span className="text-xs font-medium px-2 py-0.5 bg-danger-soft text-danger">
+                        {t('notify.daysOverdue', { n: overdueDays })}
+                      </span>
+                    ) : (
+                      <span className={`text-xs font-medium px-2 py-0.5 ${statusClass(s.status as Status)}`}>
+                        {statusLabel(s.status, t)}
+                      </span>
+                    )}
                   </td>
                   <td className="py-3 px-3 text-right whitespace-nowrap">
+                    {overdue && (
+                      <button
+                        onClick={() => onEnd?.(s)}
+                        aria-label={t('action.end')}
+                        title={t('action.end')}
+                        className="w-8 h-8 text-ink-500 hover:text-danger hover:bg-danger-soft inline-flex items-center justify-center transition-colors"
+                      >
+                        <Ban className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
                       onClick={() => onEdit(s)}
                       aria-label={t('table.edit')}
-                      className="w-8 h-8 text-ink-500 hover:text-brand-600 hover:bg-surface-2  inline-flex items-center justify-center transition-colors"
+                      title={t('table.edit')}
+                      className="w-8 h-8 text-ink-500 hover:text-brand-600 hover:bg-surface-2 inline-flex items-center justify-center transition-colors"
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
@@ -289,7 +339,8 @@ export default function SubscriptionTable({
                     <button
                       onClick={() => onDelete(s)}
                       aria-label={t('table.delete')}
-                      className="w-8 h-8 text-ink-500 hover:text-danger hover:bg-danger-soft  inline-flex items-center justify-center transition-colors ml-1"
+                      title={t('table.delete')}
+                      className="w-8 h-8 text-ink-500 hover:text-danger hover:bg-danger-soft inline-flex items-center justify-center transition-colors ml-1"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
