@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, X, ArrowRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface Props {
@@ -11,13 +11,15 @@ interface Props {
   overdue: number;
   /** 用户自设的续费提醒：已到日 */
   reminders: number;
+  /** 跳转到订阅列表去处理 */
+  onJumpToSubs?: () => void;
 }
 
 const DISMISS_KEY = 'asset_tracker_reminder_dismissed';
 
 /** 顶部横幅。数字直接来自 collectReminders —— 与铃铛、每日 webhook 同一套口径。
  *  Industrial mono: 单边 hairline + bg-tinted，无圆角无 shadow。 */
-export default function ReminderBanner({ due, expiringCards, overdue, reminders }: Props) {
+export default function ReminderBanner({ due, expiringCards, overdue, reminders, onJumpToSubs }: Props) {
   const { t } = useTranslation();
   const signature = `${due}:${expiringCards}:${overdue}:${reminders}`;
   const [dismissed, setDismissed] = useState(false);
@@ -54,9 +56,18 @@ export default function ReminderBanner({ due, expiringCards, overdue, reminders 
   return (
     <div className="mb-6 border-l-2 border-warn bg-warn-soft px-4 py-3 flex items-start gap-3">
       <AlertTriangle className="w-5 h-5 text-warn shrink-0 mt-0.5" />
-      <div className="flex-1 text-sm text-warn">
+      <div className="flex-1 min-w-0 text-sm text-warn">
         <p className="font-medium">{t('reminder.text')}</p>
         <p className="mt-0.5">{parts.join(' · ')}</p>
+        {onJumpToSubs && (
+          <button
+            onClick={onJumpToSubs}
+            className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:text-brand-600 transition-colors"
+          >
+            {t('reminder.goHandle')}
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
       <button
         type="button"

@@ -287,7 +287,9 @@ export default function CardTable({
                   {t('table.status')} <SortIcon active={sortKey === 'status'} dir={sortDir} />
                 </button>
               </th>
-              <th className="py-3 px-3 font-medium text-right">{t('table.actions')}</th>
+              <th className="py-3 px-3 font-medium text-right sticky right-0 bg-surface-0 max-md:border-l max-md:border-[color:var(--surface-3)]">
+                {t('table.actions')}
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[color:var(--surface-3)]">
@@ -298,7 +300,7 @@ export default function CardTable({
               const overdue = isOverdueCard(c);
               const overdueDays = overdue ? daysOverdue(c.expires_at) : 0;
               return (
-                <tr key={c.id ?? c.name} className="hover:bg-surface-1 transition-colors">
+                <tr key={c.id ?? c.name} className="group hover:bg-surface-1 transition-colors">
                   <td className="py-3 px-3 font-medium text-ink-900">{c.name}</td>
                   <td className="py-3 px-3 text-ink-500 hidden md:table-cell">{typeLabel(c.type as CardType, t)}</td>
                   <td className="py-3 px-3 text-ink-500 hidden md:table-cell">{c.category || '—'}</td>
@@ -323,7 +325,7 @@ export default function CardTable({
                       </span>
                     )}
                   </td>
-                  <td className="py-3 px-3 text-right whitespace-nowrap">
+                  <td className="py-3 px-3 text-right whitespace-nowrap sticky right-0 bg-surface-0 group-hover:bg-surface-1 transition-colors max-md:border-l max-md:border-[color:var(--surface-3)]">
                     {overdue && (
                       <button
                         onClick={() => onEnd?.(c)}

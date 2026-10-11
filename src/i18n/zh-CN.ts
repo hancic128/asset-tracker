@@ -19,6 +19,7 @@ const T = {
     partCards: '{{n}} 张储值卡 30 天内过期',
     partReminders: '{{n}} 条自设提醒已到日',
     hint: '查看下方图表可看趋势',
+    goHandle: '去处理',
   },
   chart: {
     title: '趋势与占比',

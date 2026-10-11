@@ -228,12 +228,17 @@ export default function App() {
               auth.signOut();
               show('info', i18n.t('login.signedOut'));
             }}
+            onRenewSub={onRenewSubscription}
+            onEndSub={onEndSubscription}
+            onExtendCard={setExtendState}
+            onEndCard={onEndCard}
           />
           <ReminderBanner
             due={reminders.dueSubs.length}
             expiringCards={reminders.expiringCards.length}
             overdue={reminders.overdueSubs.length + reminders.overdueCards.length}
             reminders={reminders.remindSubs.length + reminders.remindCards.length}
+            onJumpToSubs={() => setTab('subscriptions')}
           />
 
           {data.error && (
