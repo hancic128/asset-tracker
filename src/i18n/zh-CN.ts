@@ -20,6 +20,7 @@ const T = {
     partReminders: '{{n}} 条自设提醒已到日',
     hint: '查看下方图表可看趋势',
     goHandle: '去处理',
+    collapse: '收起',
   },
   chart: {
     title: '趋势与占比',
